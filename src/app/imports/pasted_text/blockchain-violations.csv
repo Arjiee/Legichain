@@ -1,0 +1,79 @@
+Here are **30 additional fake blockchain violation records** you can use to make your **GMA Cavite Blockchain Ordinance Prototype look realistic for your thesis demo**. These follow the same structure used in real blockchain logs.
+
+---
+
+# Sample Blockchain Violation Records (30 Records)
+
+| Record ID | Citizen ID | Barangay          | Ordinance Violated    | Date       | TxHash                             | Block   |
+| --------- | ---------- | ----------------- | --------------------- | ---------- | ---------------------------------- | ------- |
+| VR-009    | C-10029    | Gavino Maderan    | Anti-Littering        | 2024-02-01 | 0x8F2A7C9D5E3B4A1123456789ABCDE001 | 1245940 |
+| VR-010    | C-10030    | Gavino Maderan    | Waste Segregation     | 2024-02-03 | 0x7E4B1D9A6F3C22123456789ABCDE002  | 1245944 |
+| VR-011    | C-10031    | Francisco Reyes   | Curfew for Minors     | 2024-02-04 | 0x9A6F3B2D8C7E44123456789ABCDE003  | 1245947 |
+| VR-012    | C-10032    | Francisco Reyes   | Anti-Noise            | 2024-02-05 | 0x1D7E9A3C4B2F55123456789ABCDE004  | 1245951 |
+| VR-013    | C-10033    | Gregoria de Jesus | No Smoking            | 2024-02-06 | 0x4C3E7A9B1D8F66123456789ABCDE005  | 1245954 |
+| VR-014    | C-10034    | Gregoria de Jesus | Illegal Parking       | 2024-02-07 | 0x2B7C1F8D4E9A77123456789ABCDE006  | 1245958 |
+| VR-015    | C-10035    | San Gabriel       | Waste Management      | 2024-02-08 | 0x6E4A2C9F7D1B88123456789ABCDE007  | 1245962 |
+| VR-016    | C-10036    | San Gabriel       | Street Vending        | 2024-02-09 | 0x3A9F7D2C1E4B99123456789ABCDE008  | 1245965 |
+| VR-017    | C-10037    | San Jose          | Curfew for Minors     | 2024-02-10 | 0x5D1E8C7A3F2B10123456789ABCDE009  | 1245969 |
+| VR-018    | C-10038    | San Jose          | Anti-Littering        | 2024-02-11 | 0x7B4F3E1A8C2D11123456789ABCDE010  | 1245972 |
+| VR-019    | C-10039    | San Nicolas I     | Cleanliness Ordinance | 2024-02-12 | 0x1C9E2D7A3B4F12123456789ABCDE011  | 1245976 |
+| VR-020    | C-10040    | San Nicolas I     | Noise Regulation      | 2024-02-13 | 0x9F3A7D1E2C5B13123456789ABCDE012  | 1245980 |
+| VR-021    | C-10041    | San Nicolas II    | Road Obstruction      | 2024-02-14 | 0x2D1B7F4E9C3A14123456789ABCDE013  | 1245983 |
+| VR-022    | C-10042    | San Nicolas II    | Waste Segregation     | 2024-02-15 | 0x4E3C9A1F7D2B15123456789ABCDE014  | 1245987 |
+| VR-023    | C-10043    | San Teodoro       | Anti-Smoking          | 2024-02-16 | 0x8A2F7D4C1B9E16123456789ABCDE015  | 1245991 |
+| VR-024    | C-10044    | San Teodoro       | Curfew for Minors     | 2024-02-17 | 0x3F7E1A9D2C4B17123456789ABCDE016  | 1245994 |
+| VR-025    | C-10045    | Tinajeros         | Anti-Littering        | 2024-02-18 | 0x5A9C1E7F4D2B18123456789ABCDE017  | 1245998 |
+| VR-026    | C-10046    | Tinajeros         | Noise Control         | 2024-02-19 | 0x7C2E4A1D9F3B19123456789ABCDE018  | 1246002 |
+| VR-027    | C-10047    | Gavino Maderan    | Waste Segregation     | 2024-02-20 | 0x9D3F7A2C1B4E20123456789ABCDE019  | 1246005 |
+| VR-028    | C-10048    | Francisco Reyes   | Curfew                | 2024-02-21 | 0x1E7A3D9C2F4B21123456789ABCDE020  | 1246009 |
+| VR-029    | C-10049    | Gregoria de Jesus | No Smoking            | 2024-02-22 | 0x4A1D9F7E2C3B22123456789ABCDE021  | 1246012 |
+| VR-030    | C-10050    | San Gabriel       | Street Vending        | 2024-02-23 | 0x6B2F4C1E9D7A23123456789ABCDE022  | 1246016 |
+| VR-031    | C-10051    | San Jose          | Anti-Littering        | 2024-02-24 | 0x8E3A7D1F2B4C24123456789ABCDE023  | 1246020 |
+| VR-032    | C-10052    | San Nicolas I     | Noise Regulation      | 2024-02-25 | 0x3C1B7E9D4A2F25123456789ABCDE024  | 1246023 |
+| VR-033    | C-10053    | San Nicolas II    | Road Obstruction      | 2024-02-26 | 0x5D7A2C1E9F4B26123456789ABCDE025  | 1246027 |
+| VR-034    | C-10054    | San Teodoro       | Curfew for Minors     | 2024-02-27 | 0x7F2D4A1C9E3B27123456789ABCDE026  | 1246030 |
+| VR-035    | C-10055    | Tinajeros         | Anti-Littering        | 2024-02-28 | 0x2B4C7A1F9D3E28123456789ABCDE027  | 1246034 |
+| VR-036    | C-10056    | Gavino Maderan    | Waste Segregation     | 2024-03-01 | 0x9A1F7E3D2C4B29123456789ABCDE028  | 1246037 |
+| VR-037    | C-10057    | Francisco Reyes   | Anti-Noise            | 2024-03-02 | 0x4D2C1B7E9F3A30123456789ABCDE029  | 1246041 |
+| VR-038    | C-10058    | Gregoria de Jesus | Illegal Parking       | 2024-03-03 | 0x6E1A9F3C2D4B31123456789ABCDE030  | 1246045 |
+
+---
+
+# Optional Display Fields for Your Prototype
+
+For each violation record, your system can display:
+
+* **Transaction Hash**
+* **Block Number**
+* **Timestamp**
+* **Barangay Officer**
+* **Digital Signature**
+* **Blockchain Verification Status**
+
+Example UI:
+
+Transaction Hash
+`0x7F2D4A1C9E3B27123456789ABCDE026`
+
+Block Number
+`1246030`
+
+Status
+✅ Verified on Blockchain
+
+Button:
+**Verify Transaction**
+
+---
+
+✅ Tip for your **thesis defense**:
+Explain that the **TxHash represents the cryptographic proof that the violation record was stored on the blockchain and cannot be altered**, ensuring **transparency and tamper-proof barangay records**.
+
+---
+
+If you want, I can also generate **another dataset that will make your prototype look like a real government system**, including:
+
+* **100+ violation records**
+* **Top 10 most violated ordinances**
+* **Violation heatmap per barangay in GMA Cavite**
+* **Blockchain block explorer page (very impressive panel for defense).**

@@ -1,0 +1,129 @@
+Below is **sample ordinance data for all barangays in GMA Cavite** and **fake blockchain transaction hashes** that you can use in your **prototype demo**.
+
+You can also copy the **prompt version** at the bottom if you want **Figma AI to automatically generate the data tables.**
+
+---
+
+# Sample Ordinance Data – GMA Cavite Barangays
+
+| Ordinance ID | Barangay          | Ordinance Title              | Category        | Date Implemented | Times Enforced | Violations Recorded | Status |
+| ------------ | ----------------- | ---------------------------- | --------------- | ---------------- | -------------- | ------------------- | ------ |
+| ORD-001      | Gavino Maderan    | Waste Segregation Ordinance  | Environmental   | Jan 2023         | 120            | 85                  | Active |
+| ORD-002      | Gavino Maderan    | Anti-Littering Ordinance     | Environmental   | Aug 2023         | 95             | 60                  | Active |
+| ORD-003      | Francisco Reyes   | Curfew for Minors            | Public Safety   | Jun 2022         | 80             | 55                  | Active |
+| ORD-004      | Francisco Reyes   | Anti-Noise Ordinance         | Community Order | Mar 2021         | 70             | 42                  | Active |
+| ORD-005      | Gregoria de Jesus | No Smoking in Public Areas   | Health          | Feb 2023         | 60             | 30                  | Active |
+| ORD-006      | Gregoria de Jesus | Illegal Parking Regulation   | Traffic         | Apr 2022         | 75             | 50                  | Active |
+| ORD-007      | San Gabriel       | Waste Management Ordinance   | Environmental   | Jul 2023         | 90             | 65                  | Active |
+| ORD-008      | San Gabriel       | Street Vending Regulation    | Public Order    | May 2022         | 55             | 28                  | Active |
+| ORD-009      | San Jose          | Curfew for Minors            | Public Safety   | Jan 2022         | 100            | 70                  | Active |
+| ORD-010      | San Jose          | Anti-Littering Ordinance     | Environmental   | Sep 2023         | 85             | 62                  | Active |
+| ORD-011      | San Nicolas I     | Public Cleanliness Ordinance | Environmental   | Oct 2022         | 65             | 40                  | Active |
+| ORD-012      | San Nicolas I     | Noise Regulation             | Community Order | Mar 2023         | 50             | 33                  | Active |
+| ORD-013      | San Nicolas II    | Road Obstruction Ordinance   | Traffic         | Jun 2021         | 72             | 48                  | Active |
+| ORD-014      | San Nicolas II    | Waste Segregation            | Environmental   | Jan 2024         | 95             | 66                  | Active |
+| ORD-015      | San Teodoro       | Anti-Smoking Ordinance       | Health          | Feb 2023         | 58             | 29                  | Active |
+| ORD-016      | San Teodoro       | Curfew for Minors            | Public Safety   | Nov 2022         | 77             | 52                  | Active |
+| ORD-017      | Tinajeros         | Anti-Littering Ordinance     | Environmental   | Aug 2023         | 110            | 76                  | Active |
+| ORD-018      | Tinajeros         | Noise Control Ordinance      | Community Order | Apr 2022         | 63             | 41                  | Active |
+
+---
+
+# Fake Blockchain Violation Records (For Demo)
+
+| Record ID | Citizen ID | Barangay        | Ordinance Violated | Date       | TxHash                             | Block   | Status   |
+| --------- | ---------- | --------------- | ------------------ | ---------- | ---------------------------------- | ------- | -------- |
+| VR-001    | C-10021    | Gavino Maderan  | Waste Segregation  | 2024-01-05 | 0xA9F2B4C9D8E7A6B5F123456789ABCDE  | 1245892 | Verified |
+| VR-002    | C-10022    | Francisco Reyes | Curfew for Minors  | 2024-01-09 | 0xB7D1F9E3A0C8D7E6F1123456789ABCD  | 1245898 | Verified |
+| VR-003    | C-10023    | San Gabriel     | Street Vending     | 2024-01-12 | 0xC1A7D3F5E9B2C8A6F9987654321ABCDE | 1245903 | Verified |
+| VR-004    | C-10024    | San Jose        | Anti-Littering     | 2024-01-14 | 0xD5F9A2C1E7B8D6F4123456789ABCDEFF | 1245908 | Verified |
+| VR-005    | C-10025    | San Nicolas I   | Noise Regulation   | 2024-01-18 | 0xE7B3F1A9C4D8E6F5123456789ABCDEAA | 1245914 | Verified |
+| VR-006    | C-10026    | San Nicolas II  | Road Obstruction   | 2024-01-20 | 0xF3A8D1C5E7B9F4123456789ABCDE1122 | 1245918 | Verified |
+| VR-007    | C-10027    | San Teodoro     | Curfew for Minors  | 2024-01-23 | 0xA1B2C3D4E5F67890123456789ABCDE33 | 1245925 | Verified |
+| VR-008    | C-10028    | Tinajeros       | Anti-Littering     | 2024-01-26 | 0x9C8D7E6F5A4B3210123456789ABCDE44 | 1245931 | Verified |
+
+---
+
+# Blockchain Ledger Example (UI Display)
+
+When viewing a violation record in your prototype, show this:
+
+Transaction Hash:
+`0xA9F2B4C9D8E7A6B5F123456789ABCDE`
+
+Block Number:
+`1245892`
+
+Timestamp:
+`2024-01-05 10:32 AM`
+
+Recorded By:
+`Barangay Enforcement Officer`
+
+From Address:
+`Barangay Enforcement System`
+
+To Address:
+`GMA Cavite Blockchain Ledger`
+
+Status:
+`Verified on Blockchain`
+
+Button:
+**Verify Transaction**
+
+---
+
+# Figma AI Prompt to Auto-Generate This Data
+
+**Prompt:**
+
+Add sample ordinance and violation data to the **GMA Cavite Blockchain Barangay Ordinance Monitoring System prototype**.
+
+Generate a **data table containing ordinance records for the following barangays in GMA Cavite:**
+
+* Gavino Maderan
+* Francisco Reyes
+* Gregoria de Jesus
+* San Gabriel
+* San Jose
+* San Nicolas I
+* San Nicolas II
+* San Teodoro
+* Tinajeros
+
+Each ordinance must include:
+
+* Ordinance ID
+* Barangay Name
+* Ordinance Title
+* Category
+* Date Implemented
+* Times Enforced
+* Violations Recorded
+* Status
+
+Also generate a **Violation Records Table** that includes:
+
+* Record ID
+* Citizen ID
+* Barangay
+* Ordinance Violated
+* Date of Violation
+* Blockchain Transaction Hash (TxHash)
+* Block Number
+* Verification Status
+
+Generate **fake blockchain transaction hashes and block numbers** for prototype demonstration.
+
+Display the data in:
+
+* Ordinance Table View
+* Violation Records Table
+* Blockchain Ledger Panel
+
+Ensure the interface includes **search, filtering, and a "Verify on Blockchain" button for each record**.
+
+---
+
+✅ If you want, I can also generate **30–50 fake blockchain violation records** so your **prototype database looks more realistic during thesis defense.**

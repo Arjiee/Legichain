@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+}
+
+:root {
+  /* New Unified Color Palette - GMA Blockchain Golden/Earth */
+  --tech-primary-bg: #F8F3D9;
+  --tech-secondary-accent: #EBE5C2;
+  --tech-highlight-buttons: #B9B28A;
+  --tech-text-borders: #504B38;
+  
+  --font-size: 16px;
+  --background: #F8F3D9;
+  --foreground: #504B38;
+  --card: #ffffff;
+  --card-foreground: #504B38;
+  --popover: #ffffff;
+  --popover-foreground: #504B38;
+  --primary: #B9B28A;
+  --primary-foreground: #ffffff;
+  --secondary: #EBE5C2;
+  --secondary-foreground: #504B38;
+  --muted: #EBE5C2;
+  --muted-foreground: #504B38;
+  --accent: #EBE5C2;
+  --accent-foreground: #504B38;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: #504B38;
+  --input: transparent;
+  --input-background: #ffffff;
+  --switch-background: #B9B28A;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #B9B28A;
+  --chart-1: #504B38;
+  --chart-2: #B9B28A;
+  --chart-3: #EBE5C2;
+  --chart-4: #F8F3D9;
+  --chart-5: #504B38;
+  --radius: 0.75rem;
+  --sidebar: #EBE5C2;
+  --sidebar-foreground: #504B38;
+  --sidebar-primary: #B9B28A;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #F8F3D9;
+  --sidebar-accent-foreground: #504B38;
+  --sidebar-border: rgba(80, 75, 56, 0.2);
+  --sidebar-ring: #B9B28A;
+}
+
+.dark {
+  --background: #504B38;
+  --foreground: #F8F3D9;
+  --card: #B9B28A;
+  --card-foreground: #F8F3D9;
+  --popover: #B9B28A;
+  --popover-foreground: #F8F3D9;
+  --primary: #EBE5C2;
+  --primary-foreground: #504B38;
+  --secondary: #F8F3D9;
+  --secondary-foreground: #504B38;
+  --muted: #B9B28A;
+  --muted-foreground: #EBE5C2;
+  --accent: #F8F3D9;
+  --accent-foreground: #504B38;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(235, 229, 194, 0.2);
+  --input: rgba(235, 229, 194, 0.1);
+  --ring: #EBE5C2;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: #F8F3D9;
+  --chart-2: #EBE5C2;
+  --chart-3: #B9B28A;
+  --chart-4: #504B38;
+  --chart-5: #ffffff;
+  --sidebar: #504B38;
+  --sidebar-foreground: #F8F3D9;
+  --sidebar-primary: #EBE5C2;
+  --sidebar-primary-foreground: #504B38;
+  --sidebar-accent: #F8F3D9;
+  --sidebar-accent-foreground: #504B38;
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: #EBE5C2;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-size: var(--font-size);
+    font-weight: var(--font-weight-normal);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: var(--font-weight-medium);
+  }
+}
+
+/* Custom Utilities for Blockchain Theme */
+.text-tech-primary { color: var(--tech-primary-bg); }
+.bg-tech-primary { background-color: var(--tech-primary-bg); }
+.border-tech-primary { border-color: var(--tech-primary-bg); }
+
+.text-tech-secondary { color: var(--tech-secondary-accent); }
+.bg-tech-secondary { background-color: var(--tech-secondary-accent); }
+
+.text-tech-highlight { color: var(--tech-highlight-buttons); }
+.bg-tech-highlight { background-color: var(--tech-highlight-buttons); }
+
+.text-tech-text { color: var(--tech-text-borders); }
+.bg-tech-text { background-color: var(--tech-text-borders); }
+
+/* Keep legacy names for compatibility but update colors */
+.text-tech-blue { color: var(--tech-primary-bg); }
+.bg-tech-blue { background-color: var(--tech-primary-bg); }
+.border-tech-blue { border-color: var(--tech-primary-bg); }
+.text-tech-steel { color: var(--tech-secondary-accent); }
+.bg-tech-steel { background-color: var(--tech-secondary-accent); }
+.text-tech-muted { color: var(--tech-highlight-buttons); }
+.bg-tech-muted { background-color: var(--tech-highlight-buttons); }
+.text-tech-beige { color: var(--tech-text-borders); }
+.bg-tech-beige { background-color: var(--tech-text-borders); }
+
+/* Animation Overrides */
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .5; }
+}
+
+/* Scrollbar Customization */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--tech-primary-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tech-text-borders);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tech-highlight-buttons);
+}
+
+/* Glassmorphism Classes */
+.glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.glass-dark {
+  background: rgba(80, 75, 56, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
