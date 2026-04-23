@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Loader2 } from 'lucide-react';
+import { X, Save, Loader2, Database, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarangayProject, ProjectCategory, ProjectStatus, FundingSource } from '../utils/projectData';
 
@@ -31,8 +31,6 @@ const BARANGAYS = ['Poblacion 1', 'Poblacion 2', 'Poblacion 3', 'Poblacion 4', '
 
 const generateId = () => Date.now().toString();
 const generateProjectId = () => `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100).padStart(3, '0')}`;
-const generateTxHash = () => '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-const generateBlock = () => String(15000000 + Math.floor(Math.random() * 1000000));
 
 const BLANK_PROJECT: BarangayProject = {
   id: '',
@@ -58,14 +56,15 @@ const BLANK_PROJECT: BarangayProject = {
     proofOfExpenditure: [],
     lastUpdated: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
   },
-  blockchainVerified: true,
+  // CHANGED: Start with false so the context can handle the real sealing process
+  blockchainVerified: false, 
   txHash: '',
   block: '',
-  timestamp: new Date().toISOString(),
-  fromAddress: '0x1234567890abcdef1234567890abcdef1234567890',
-  toAddress: '0xabcdef1234567890abcdef1234567890abcdef1234567890',
+  timestamp: '',
+  fromAddress: '',
+  toAddress: '',
   documentHash: '',
-  verificationStatus: 'Verified on Chain',
+  verificationStatus: 'Pending Blockchain Registry',
   supportingDocs: [],
   datePublished: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
 };
@@ -79,7 +78,12 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
     if (editProject) {
       setForm(editProject);
     } else {
-      setForm({ ...BLANK_PROJECT, id: generateId(), projectId: generateProjectId(), txHash: generateTxHash(), block: generateBlock(), documentHash: generateTxHash() });
+      // REMOVED: Mock txHash/block generation. Real data comes from Polygon Amoy
+      setForm({ 
+        ...BLANK_PROJECT, 
+        id: generateId(), 
+        projectId: generateProjectId() 
+      });
     }
     setError('');
   }, [editProject, isOpen]);
@@ -92,7 +96,6 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
     setForm(prev => {
       const budget = field === 'totalApprovedBudget' ? Number(value) : prev.financials.totalApprovedBudget;
       const utilized = field === 'amountUtilized' ? Number(value) : prev.financials.amountUtilized;
-      const released = field === 'amountReleased' ? Number(value) : prev.financials.amountReleased;
       const remaining = budget - utilized;
       
       let utilizationStatus: 'Not Started' | 'Partially Utilized' | 'Fully Utilized' = 'Not Started';
@@ -121,10 +124,11 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
     try {
       setSaving(true);
       setError('');
-      await onSave(form);
+      // This will trigger the IPFS upload and Polygon minting in the DataContext
+      await onSave(form); 
       onClose();
     } catch (e: any) {
-      setError(e.message || 'Failed to save project.');
+      setError(e.message || 'Blockchain sealing failed. Please check your wallet.');
     } finally {
       setSaving(false);
     }
@@ -153,8 +157,8 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
                 <h2 className="text-2xl font-black text-[#1C1C1C]">
                   {editProject ? 'Edit Project' : 'Add New Project'}
                 </h2>
-                <p className="text-xs text-gray-500 font-bold mt-1">
-                  {editProject ? `Editing: ${editProject.projectId}` : 'Create a new barangay project record'}
+                <p className="text-xs text-[#088395] font-black uppercase tracking-widest mt-1 flex items-center gap-2">
+                  <Database size={12} /> Sealing to Polygon Blockchain
                 </p>
               </div>
               <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors">
@@ -162,7 +166,7 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
               </button>
             </div>
 
-            {/* Modal Body */}
+            {/* Modal Body - Preserving all original inputs */}
             <div className="p-8 overflow-y-auto space-y-8 flex-1">
               {error && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-bold">
@@ -316,7 +320,7 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
                       value={form.financials.totalApprovedBudget}
                       onChange={e => updateFinancials('totalApprovedBudget', e.target.value)}
                       min={0}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none font-bold text-[#088395]"
                     />
                   </div>
                   <div>
@@ -376,12 +380,12 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="px-8 py-3 bg-[#088395] text-white font-bold rounded-2xl hover:bg-[#09637E] transition-all shadow-md flex items-center gap-2 disabled:opacity-60"
+                className="px-8 py-3 bg-[#088395] text-white font-black rounded-2xl hover:bg-[#09637E] transition-all shadow-md flex items-center gap-2 disabled:opacity-60"
               >
                 {saving ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Sealing to Blockchain...</>
                 ) : (
-                  <><Save className="w-4 h-4" /> {editProject ? 'Save Changes' : 'Create Project'}</>
+                  <><Save className="w-4 h-4" /> {editProject ? 'Save Changes' : 'Seal & Record Project'}</>
                 )}
               </button>
             </div>

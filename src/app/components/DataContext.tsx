@@ -1,17 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { BarangayProject, SAMPLE_PROJECTS } from '../utils/projectData';
-import { Document, DOCUMENTS } from '../utils/documentData';
-import { BlockchainTransaction, BLOCKCHAIN_TRANSACTIONS } from '../utils/blockchainData';
-import { ProjectAuditLog, PROJECT_AUDIT_LOGS } from '../utils/auditLogData';
+import { BarangayProject } from '../utils/projectData';
+import { Document } from '../utils/documentData';
+import { ProjectAuditLog } from '../utils/auditLogData';
+import { BlockchainTransaction } from '../utils/blockchainData';
 import * as api from '../utils/api';
 
 // Web3 Integration
 import { getAllBlockchainDocumentsWithMetadata } from '../utils/blockchainReader';
-import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
 import { wagmiConfig, LEGICHAIN_CONTRACT_ADDRESS } from '../config/web3Config';
-import { parseAbi } from 'viem';
 import { uploadProjectToIPFS, mintNFTOnPolygon } from '../utils/web3Utils';
+import { parseAbi } from 'viem';
+import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
 
 export const INITIAL_BARANGAYS = [
   { id: "1", name: "Poblacion 1" },
@@ -39,25 +39,14 @@ interface DataContextType {
   blockchainTxs: BlockchainTransaction[];
   barangays: Array<{ id: string; name: string }>;
   loadingProjects: boolean;
-  loadingAuditLogs: boolean;
-  loadingDocuments: boolean;
   loadingBlockchain: boolean;
-  loadingBarangays: boolean;
   projectStats: ProjectStats;
-  setProjects: React.Dispatch<React.SetStateAction<BarangayProject[]>>;
-  setAuditLogs: React.Dispatch<React.SetStateAction<ProjectAuditLog[]>>;
-  setDbDocuments: React.Dispatch<React.SetStateAction<Document[]>>;
   handleCreateProject: (project: BarangayProject) => Promise<void>;
   handleUpdateProject: (project: BarangayProject) => Promise<void>;
   handleDeleteProject: (projectId: string) => Promise<boolean>;
   handleCreateDocument: (doc: Document) => Promise<void>;
-  handleUpdateDocument: (doc: Document) => Promise<void>;
-  handleDeleteDocument: (docId: string) => Promise<boolean>;
   handleVerifyDocument: (doc: Document) => Promise<void>;
-  handleSealProjectToBlockchain: (project: BarangayProject) => Promise<void>; // Added for Project Sealing
-  handleAddBarangay: () => Promise<void>;
-  handleEditBarangay: (id: string) => Promise<void>;
-  handleDeleteBarangay: (id: string) => Promise<void>;
+  handleSealProjectToBlockchain: (project: BarangayProject) => Promise<void>;
   handleRefreshData: () => Promise<void>;
 }
 
@@ -77,12 +66,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [barangays, setBarangays] = useState<Array<{ id: string; name: string }>>(INITIAL_BARANGAYS);
   
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [loadingAuditLogs, setLoadingAuditLogs] = useState(true);
-  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [loadingBlockchain, setLoadingBlockchain] = useState(true);
-  const [loadingBarangays, setLoadingBarangays] = useState(true);
 
-  const projectStats = useMemo<ProjectStats>(() => ({
+  const projectStats = useMemo(() => ({
     total: projects.length,
     active: projects.filter(p => p.projectStatus === 'Ongoing').length,
     completed: projects.filter(p => p.projectStatus === 'Completed').length,
@@ -93,73 +79,163 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     verified: projects.filter(p => p.blockchainVerified).length,
   }), [projects]);
 
-  // Comprehensive synchronization logic for both Documents and Projects
   const syncEverything = async () => {
     try {
       setLoadingBlockchain(true);
-      
-      // 1. Fetch all records from Smart Contract + IPFS
       const blockchainDocs = await getAllBlockchainDocumentsWithMetadata();
-      
-      // 2. Process Projects from Blockchain
-      const liveProjects = blockchainDocs
+      const supabaseDocs = await api.fetchDocuments();
+      const supabaseProjects = await api.fetchProjects();
+
+      // 1. Map Blockchain Docs to Explorer Transactions
+      const txs: BlockchainTransaction[] = (blockchainDocs || []).map(doc => ({
+        id: doc.id,
+        txHash: doc.txHash || '0x...',
+        blockNumber: doc.blockNumber || '---',
+        ordinanceId: (doc as any).projectId || (doc as any).documentId || `LEG-${doc.id}`,
+        ordinanceTitle: doc.title,
+        barangay: doc.barangay,
+        recordType: (doc as any).type === 'Project' ? 'Project Record' : 'Ordinance Record',
+        actionRecorded: 'Minted',
+        timestamp: doc.datePublished || new Date().toISOString(),
+        recordedBy: 'Admin Protocol',
+        verificationStatus: 'Verified',
+        blockExplorerUrl: `https://amoy.polygonscan.com/tx/${doc.txHash}`
+      }));
+      setBlockchainTxs(txs);
+
+      // 2. Resolve Projects (Blockchain wins over Supabase)
+      const liveProjects = (blockchainDocs || [])
         .filter(doc => (doc as any).type === 'Project')
         .map(doc => doc as unknown as BarangayProject);
 
-      setProjects(prev => {
+      setProjects(() => {
         const merged = [...liveProjects];
-        prev.forEach(p => {
+        (supabaseProjects || []).forEach(p => {
           if (!merged.find(m => m.projectId === p.projectId)) merged.push(p);
         });
-        return merged;
+        return merged.sort((a, b) => (b.id > a.id ? 1 : -1));
       });
 
-      // 3. Process Standard Documents (Ordinances/Resolutions)
-      const supabaseDocs = await api.fetchDocuments();
-      const mergedDocs = [...blockchainDocs.filter(doc => (doc as any).type !== 'Project')];
-      
-      supabaseDocs.forEach(sDoc => {
+      // 3. Resolve Ordinances
+      const mergedDocs = [...(blockchainDocs || []).filter(doc => (doc as any).type !== 'Project')];
+      (supabaseDocs || []).forEach(sDoc => {
         if (!mergedDocs.find(bDoc => bDoc.documentId === sDoc.documentId)) mergedDocs.push(sDoc);
       });
-      
       setDbDocuments(mergedDocs);
+
     } catch (e) {
       console.error("Sync failed:", e);
     } finally {
       setLoadingBlockchain(false);
-      setLoadingDocuments(false);
     }
   };
 
   useEffect(() => {
     const init = async () => {
       const [projR, logsR, barR] = await Promise.allSettled([
-        api.fetchProjects(),
-        api.fetchAuditLogs(),
-        api.fetchBarangays(),
+        api.fetchProjects(), api.fetchAuditLogs(), api.fetchBarangays(),
       ]);
-      if (projR.status === 'fulfilled') setProjects(projR.value);
-      if (logsR.status === 'fulfilled') setAuditLogs(logsR.value);
-      if (barR.status === 'fulfilled') setBarangays(barR.value);
+      if (projR.status === 'fulfilled') setProjects(projR.value || []);
+      if (logsR.status === 'fulfilled') setAuditLogs(logsR.value || []);
+      if (barR.status === 'fulfilled') setBarangays(barR.value || INITIAL_BARANGAYS);
       
       await syncEverything();
-      
       setLoadingProjects(false);
-      setLoadingAuditLogs(false);
-      setLoadingBarangays(false);
     };
     init();
   }, []);
 
   const handleRefreshData = async () => {
-    toast.info('Synchronizing blockchain records...');
+    toast.info('Polling Polygon Amoy Ledger...');
     await syncEverything();
     toast.success('System synchronized');
   };
 
+  const handleCreateProject = async (project: BarangayProject) => {
+    try {
+      await api.createProject(project);
+      setProjects(prev => [project, ...prev]);
+      toast.success("Database record created.");
+    } catch (e) { toast.error("Local save failed."); }
+  };
+
+  const handleUpdateProject = async (project: BarangayProject) => {
+    try {
+      await api.updateProject(project.id, project);
+      setProjects(prev => prev.map(p => p.id === project.id ? project : p));
+      toast.success("Record updated.");
+    } catch (e) { toast.error("Update failed."); }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm("Remove this project record?")) return false;
+    try {
+      await api.deleteProject(projectId);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      return true;
+    } catch (e) { return false; }
+  };
+
+  const handleSealProjectToBlockchain = async (project: BarangayProject) => {
+    try {
+      toast.loading("Uploading fat metadata to IPFS...");
+      const metadataHash = await uploadProjectToIPFS(project);
+      
+      toast.loading("Anchoring proof on Polygon (Amoy)...");
+      const txHash = await mintNFTOnPolygon(
+        project.projectTitle,
+        metadataHash,
+        project.barangay,
+        LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`
+      );
+
+      // 1. Update Database
+      const verifiedUpdate = { 
+        ...project, 
+        blockchainVerified: true, 
+        txHash, 
+        documentHash: metadataHash,
+        verificationStatus: 'Verified on Chain'
+      };
+      await api.updateProject(project.id, verifiedUpdate);
+
+      // 2. NEW: Generate Audit Log for the Seal Action
+      const log = {
+        id: `LOG-${Date.now()}`,
+        timestamp: new Date().toLocaleString(),
+        performedBy: 'Admin Official',
+        action: 'Project Sealed to Blockchain',
+        actionType: 'Verify',
+        module: 'Blockchain',
+        description: `Immutable record created for ${project.projectTitle}`,
+        barangay: project.barangay,
+        projectId: project.projectId,
+        projectTitle: project.projectTitle,
+        txHash: txHash,
+        blockchainStatus: 'Success'
+      };
+      await api.createAuditLog(log as any);
+      setAuditLogs(prev => [log as any, ...prev]);
+
+      toast.dismiss();
+      toast.success("Project immutably recorded & logged!");
+      await syncEverything(); 
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(`Blockchain Error: ${error.message}`);
+      throw error;
+    }
+  };
+
+  const handleCreateDocument = async (doc: Document) => {
+    await api.createDocument(doc);
+    setDbDocuments(prev => [doc, ...prev]);
+    toast.success("Document added to ledger.");
+  };
+
   const handleVerifyDocument = async (doc: Document) => {
     try {
-      toast.loading("Sending verification to blockchain...");
+      toast.loading("Sending verification...");
       const abi = parseAbi(['function verifyDocument(uint256 tokenId) public']);
       const hash = await writeContract(wagmiConfig as any, {
         address: LEGICHAIN_CONTRACT_ADDRESS,
@@ -169,59 +245,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       await waitForTransactionReceipt(wagmiConfig as any, { hash });
       toast.dismiss();
-      toast.success(`Verified on Polygon!`);
+      toast.success(`Verified!`);
       await syncEverything();
     } catch (error: any) {
       toast.dismiss();
-      toast.error(`Verification failed: ${error.message}`);
+      toast.error(`Verification failed.`);
     }
   };
-
-  // Real Web3 Project Upload
-  const handleSealProjectToBlockchain = async (project: BarangayProject) => {
-    try {
-      toast.loading("Sealing project to Polygon blockchain...");
-      
-      // 1. Upload full project metadata (financials, etc.) to IPFS
-      const metadataHash = await uploadProjectToIPFS(project);
-      
-      // 2. Record Registry CID on the Smart Contract
-      const txHash = await mintNFTOnPolygon(
-        project.projectTitle,
-        metadataHash,
-        project.barangay,
-        LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`
-      );
-
-      toast.dismiss();
-      toast.success("Project immutably recorded!");
-      await syncEverything(); 
-    } catch (error: any) {
-      toast.dismiss();
-      toast.error(`Blockchain Error: ${error.message}`);
-    }
-  };
-
-  // ... (keep handleCreateProject and other CRUD functions)
 
   return (
     <DataContext.Provider value={{
       projects, auditLogs, dbDocuments, blockchainTxs, barangays,
-      loadingProjects, loadingAuditLogs, loadingDocuments, loadingBlockchain, loadingBarangays,
-      projectStats,
-      setProjects, setAuditLogs, setDbDocuments,
-      handleCreateProject: async () => {}, // Use existing logic
-      handleUpdateProject: async () => {}, // Use existing logic
-      handleDeleteProject: async () => false, // Use existing logic
-      handleCreateDocument: async () => {}, // Use existing logic
-      handleUpdateDocument: async () => {}, // Use existing logic
-      handleDeleteDocument: async () => false, // Use existing logic
-      handleVerifyDocument,
-      handleSealProjectToBlockchain,
-      handleAddBarangay: async () => {}, // Use existing logic
-      handleEditBarangay: async () => {}, // Use existing logic
-      handleDeleteBarangay: async () => {}, // Use existing logic
-      handleRefreshData,
+      loadingProjects, loadingBlockchain, projectStats,
+      handleCreateProject, handleUpdateProject, handleDeleteProject,
+      handleCreateDocument, handleVerifyDocument,
+      handleSealProjectToBlockchain, handleRefreshData
     }}>
       {children}
     </DataContext.Provider>

@@ -1,6 +1,6 @@
 /**
  * Web3 Utility Functions
- * Real implementation for IPFS upload and Polygon Amoy minting
+ * Optimized for Gas Efficiency: Fat data stays on IPFS, Lean pointers go to Blockchain.
  */
 
 import { PINATA_CONFIG, wagmiConfig } from '../config/web3Config';
@@ -17,7 +17,7 @@ const LEGICHAIN_ABI = parseAbi([
 ]);
 
 /**
- * Upload images to IPFS via Pinata REST API
+ * Upload images/files to IPFS - Costs $0 Gas
  */
 export async function uploadImagesToIPFS(files: File[]): Promise<string> {
   if (files.length === 0) return '';
@@ -36,7 +36,7 @@ export async function uploadImagesToIPFS(files: File[]): Promise<string> {
     }
 
     const metadata = JSON.stringify({
-      name: `LegiChain-Upload-${Date.now()}`,
+      name: `LegiChain-Asset-${Date.now()}`,
     });
     formData.append('pinataMetadata', metadata);
 
@@ -49,52 +49,18 @@ export async function uploadImagesToIPFS(files: File[]): Promise<string> {
       body: formData,
     });
 
-    if (!response.ok) throw new Error('IPFS Image Upload Failed');
+    if (!response.ok) throw new Error('IPFS Asset Upload Failed');
     const result = await response.json();
-    return result.IpfsHash;
+    return result.IpfsHash; // Returns the CID
   } catch (error) {
-    console.error('❌ IPFS image upload failed:', error);
+    console.error('❌ IPFS upload failed:', error);
     throw error;
   }
 }
 
 /**
- * Upload standard document data (Ordinances/Resolutions) to IPFS
- */
-export async function uploadDocumentDataToIPFS(
-  documentData: Partial<Document>,
-  tags: string[],
-  imagesHash: string
-): Promise<string> {
-  const metadata = {
-    ...documentData,
-    type: documentData.type || 'Ordinance',
-    tags,
-    images: imagesHash ? `ipfs://${imagesHash}` : '',
-    uploadTimestamp: Date.now(),
-    version: '1.0'
-  };
-
-  const response = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
-    method: "POST",
-    headers: {
-      'Content-Type': 'application/json',
-      pinata_api_key: PINATA_CONFIG.apiKey,
-      pinata_secret_api_key: PINATA_CONFIG.secretKey,
-    },
-    body: JSON.stringify({
-      pinataContent: metadata,
-      pinataMetadata: { name: `Doc-${documentData.documentId || Date.now()}` }
-    }),
-  });
-
-  if (!response.ok) throw new Error('Failed to pin Document JSON to IPFS');
-  const result = await response.json();
-  return result.IpfsHash;
-}
-
-/**
- * Upload Barangay Project metadata to IPFS
+ * Upload Fat Metadata to IPFS - Costs $0 Gas
+ * Stores all heavy details (descriptions, financials) off-chain.
  */
 export async function uploadProjectToIPFS(
   project: BarangayProject,
@@ -105,6 +71,7 @@ export async function uploadProjectToIPFS(
     type: 'Project',
     images: imagesHash ? `ipfs://${imagesHash}` : '',
     uploadTimestamp: Date.now(),
+    // We store the heavy description and financial arrays here, NOT on the blockchain.
   };
 
   const response = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
@@ -120,17 +87,18 @@ export async function uploadProjectToIPFS(
     }),
   });
 
-  if (!response.ok) throw new Error('Failed to pin Project JSON to IPFS');
+  if (!response.ok) throw new Error('Failed to pin Metadata to IPFS');
   const result = await response.json();
-  return result.IpfsHash;
+  return result.IpfsHash; 
 }
 
 /**
- * Mint NFT on Polygon Amoy
+ * Mint NFT on Polygon Amoy - MINIMIZED GAS
+ * We only send lean pointers to the blockchain.
  */
 export async function mintNFTOnPolygon(
   title: string,
-  metadataUri: string,
+  metadataUri: string, // This is the CID from IPFS
   barangay: string,
   contractAddress: `0x${string}`
 ): Promise<string> {
@@ -138,11 +106,19 @@ export async function mintNFTOnPolygon(
     throw new Error('Contract address not configured');
   }
 
+  // To minimize gas, we pass the title and the CID. 
+  // The blockchain doesn't need to know the budget or description; 
+  // it just provides the tamper-proof "Proof of Existence" via the ipfsHash CID.
   const hash = await writeContract(wagmiConfig as any, {
     address: contractAddress,
     abi: LEGICHAIN_ABI,
     functionName: 'mintDocument',
-    args: [title, `ipfs://${metadataUri}`, metadataUri, barangay],
+    args: [
+      title.substring(0, 32), // Keep title short to save gas
+      `ipfs://${metadataUri}`, 
+      metadataUri, 
+      barangay
+    ],
   });
 
   const receipt = await waitForTransactionReceipt(wagmiConfig as any, { hash });
@@ -150,7 +126,40 @@ export async function mintNFTOnPolygon(
 }
 
 /**
- * Complete Web3 upload flow - RESTORED
+ * Optimized Document Upload Flow
+ */
+export async function uploadDocumentDataToIPFS(
+  documentData: Partial<Document>,
+  tags: string[],
+  imagesHash: string
+): Promise<string> {
+  const metadata = {
+    ...documentData,
+    type: documentData.type || 'Ordinance',
+    tags,
+    images: imagesHash ? `ipfs://${imagesHash}` : '',
+    uploadTimestamp: Date.now(),
+  };
+
+  const response = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+    method: "POST",
+    headers: {
+      'Content-Type': 'application/json',
+      pinata_api_key: PINATA_CONFIG.apiKey,
+      pinata_secret_api_key: PINATA_CONFIG.secretKey,
+    },
+    body: JSON.stringify({
+      pinataContent: metadata,
+      pinataMetadata: { name: `Doc-${documentData.documentId}` }
+    }),
+  });
+
+  const result = await response.json();
+  return result.IpfsHash;
+}
+
+/**
+ * Orchestrates the full flow: Asset -> Metadata -> Blockchain
  */
 export async function completeWeb3Upload(
   documentData: Partial<Document>,
@@ -179,5 +188,5 @@ export async function completeWeb3Upload(
 
 export function getIPFSUrl(hash: string): string {
   if (!hash) return '';
-  return `https://gateway.pinata.cloud/ipfs/${hash.replace('ipfs://', '')}`;
+  return `${PINATA_CONFIG.gateway}${hash.replace('ipfs://', '')}`;
 }
