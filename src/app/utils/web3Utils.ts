@@ -194,5 +194,15 @@ export async function completeWeb3Upload(
 
 export function getIPFSUrl(hash: string): string {
   if (!hash) return '';
-  return `${PINATA_CONFIG.gateway}${hash.replace('ipfs://', '')}`;
+
+  // 1. Remove the 'ipfs://' prefix if it exists
+  const cleanHash = hash.replace(/^ipfs:\/\//, '');
+
+  // 2. Ensure the gateway ends with a slash and combine
+  // This prevents "https://gateway.com/ipfsQm..." errors
+  const gateway = PINATA_CONFIG.gateway.endsWith('/') 
+    ? PINATA_CONFIG.gateway 
+    : `${PINATA_CONFIG.gateway}/`;
+
+  return `${gateway}${cleanHash}`;
 }

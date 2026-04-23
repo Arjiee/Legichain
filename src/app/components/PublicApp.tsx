@@ -2,18 +2,21 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
   ShieldCheck, Search, Database, ArrowRight, FileText, Users, History,
-  ExternalLink, AlertCircle, Eye
+  ExternalLink, AlertCircle, Eye, Scale, BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ImageWithFallback } from './fallback/ImageWithFallback';
 import { ProjectsPage } from './ProjectsPage';
 import { ProjectDetailsPage } from './ProjectDetailsPage';
+import { DocumentsPage } from './DocumentsPage'; // The paginated table view
+import { PublicDocumentDetailsPage } from './PublicDocumentDetailsPage';
 import { FOISection } from './FOISection';
 import { useData } from './DataContext';
 import { BarangayProject } from '../utils/projectData';
 import { Document } from '../utils/documentData';
 
-type PublicView = 'home' | 'dashboard' | 'project-detail' | 'foi';
+// Added document-related views to the type
+type PublicView = 'home' | 'dashboard' | 'documents-monitoring' | 'project-detail' | 'document-detail' | 'foi';
 
 const BlockchainBadge = ({ status }: { status: boolean }) => (
   <div className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
@@ -31,13 +34,15 @@ const BlockchainBadge = ({ status }: { status: boolean }) => (
 
 export function PublicApp() {
   const navigate = useNavigate();
-  const { projects, barangays, loadingProjects } = useData();
+  const { projects, dbDocuments, barangays, loadingProjects, loadingBlockchain } = useData();
+  
   const [view, setView] = useState<PublicView>('home');
   const [selectedProject, setSelectedProject] = useState<BarangayProject | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedBarangayId, setSelectedBarangayId] = useState('all');
 
   const Navbar = () => (
-    <nav className="fixed top-0 left-0 right-0 h-16 bg-[#09637E] border-b border-[#09637E]/20 flex items-center justify-between px-6 z-40">
+    <nav className="fixed top-0 left-0 right-0 h-16 bg-[#09637E] border-b border-[#09637E]/20 flex items-center justify-between px-6 z-40 shadow-sm">
       <button
         onClick={() => setView('home')}
         className="flex items-center space-x-3 cursor-pointer"
@@ -48,49 +53,22 @@ export function PublicApp() {
         <span className="font-bold text-white tracking-tight text-lg">LegiChain</span>
       </button>
 
-      <div className="hidden md:flex items-center space-x-8">
-        <button
-          onClick={() => setView('home')}
-          className={`text-sm cursor-pointer transition-colors ${
-            view === 'home' ? 'text-white font-bold underline decoration-2 underline-offset-4' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          Home
-        </button>
-        <button
-          onClick={() => setView('dashboard')}
-          className={`text-sm cursor-pointer transition-colors ${
-            view === 'dashboard' || view === 'project-detail' ? 'text-white font-bold underline decoration-2 underline-offset-4' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          Projects Monitoring
-        </button>
-        <button
-          onClick={() => setView('foi')}
-          className={`text-sm cursor-pointer transition-colors ${
-            view === 'foi' ? 'text-white font-bold underline decoration-2 underline-offset-4' : 'text-white/70 hover:text-white'
-          }`}
-        >
-          FOI Office
-        </button>
+      <div className="hidden lg:flex items-center space-x-8">
+        <NavButton active={view === 'home'} onClick={() => setView('home')} label="Home" />
+        <NavButton 
+          active={view === 'dashboard' || view === 'project-detail'} 
+          onClick={() => setView('dashboard')} 
+          label="Projects Monitoring" 
+        />
+        <NavButton 
+          active={view === 'documents-monitoring' || view === 'document-detail'} 
+          onClick={() => setView('documents-monitoring')} 
+          label="Documents Monitoring" 
+        />
+        <NavButton active={view === 'foi'} onClick={() => setView('foi')} label="FOI Office" />
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Mobile menu buttons */}
-        <div className="flex md:hidden items-center gap-2">
-          <button
-            onClick={() => setView('dashboard')}
-            className="px-3 py-1.5 rounded-full bg-white/20 text-white text-xs font-bold hover:bg-white/30 transition-all border border-white/30 cursor-pointer"
-          >
-            Projects
-          </button>
-          <button
-            onClick={() => setView('foi')}
-            className="px-3 py-1.5 rounded-full bg-white/20 text-white text-xs font-bold hover:bg-white/30 transition-all border border-white/30 cursor-pointer"
-          >
-            FOI
-          </button>
-        </div>
         <Link
           to="/login"
           className="px-4 py-1.5 rounded-full bg-[#088395] text-white text-xs font-bold hover:bg-white hover:text-[#09637E] transition-all shadow-md cursor-pointer border border-transparent hover:border-[#09637E]/20"
@@ -99,6 +77,23 @@ export function PublicApp() {
         </Link>
       </div>
     </nav>
+  );
+
+  const NavButton = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
+    <button
+      onClick={onClick}
+      className={`text-sm cursor-pointer transition-all relative py-1 ${
+        active ? 'text-white font-bold' : 'text-white/70 hover:text-white'
+      }`}
+    >
+      {label}
+      {active && (
+        <motion.div 
+          layoutId="nav-underline" 
+          className="absolute -bottom-1 left-0 right-0 h-0.5 bg-white rounded-full" 
+        />
+      )}
+    </button>
   );
 
   return (
@@ -110,8 +105,8 @@ export function PublicApp() {
           <AnimatePresence mode="wait">
             {view === 'home' && (
               <motion.div key="home" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
-                {/* Hero */}
-                <div className="relative rounded-[40px] overflow-hidden bg-[#7AB2B2] min-h-[500px] flex items-center p-12 border border-[#09637E]/20">
+                {/* Hero Section */}
+                <div className="relative rounded-[40px] overflow-hidden bg-[#7AB2B2] min-h-[500px] flex items-center p-8 md:p-16 border border-[#09637E]/20 shadow-xl">
                   <div className="absolute inset-0 opacity-20 grayscale">
                     <ImageWithFallback
                       src="https://images.unsplash.com/photo-1593642532400-2682810df593?q=80&w=1000&auto=format&fit=crop"
@@ -121,98 +116,38 @@ export function PublicApp() {
                   </div>
                   <div className="relative z-10 max-w-2xl">
                     <h1 className="text-5xl md:text-6xl font-black text-white leading-tight mb-6">
-                      Transparent Barangay Projects,{' '}
+                      Civic Accountability,{' '}
                       <br />
-                      <span className="text-[#09637E]">Secured by Blockchain.</span>
+                      <span className="text-[#09637E]">Powered by the Chain.</span>
                     </h1>
-                    <p className="text-lg text-white/90 mb-10 leading-relaxed">
-                      LegiChain provides an immutable, tamper-proof platform for monitoring all local government
-                      projects, ensuring total transparency for every citizen of GMA, Cavite.
+                    <p className="text-lg text-white/90 mb-10 leading-relaxed font-medium">
+                      Monitor local governance with absolute certainty. Access real-time project tracking and the official 
+                      document registry of GMA, Cavite—secured immutably on the Polygon blockchain.
                     </p>
                     <div className="flex flex-wrap gap-4">
                       <button
                         onClick={() => setView('dashboard')}
                         className="px-8 py-4 bg-[#088395] text-white font-bold rounded-2xl flex items-center group hover:bg-[#09637E] transition-all shadow-lg cursor-pointer"
                       >
-                        Explore Projects Dashboard
+                        Explore Projects
                         <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                       </button>
                       <button
-                        onClick={() => setView('foi')}
+                        onClick={() => setView('documents-monitoring')}
                         className="px-8 py-4 bg-white/40 backdrop-blur-md text-[#09637E] font-bold rounded-2xl border border-white/40 hover:bg-white/60 transition-all cursor-pointer"
                       >
-                        View Public Records
+                        Browse Documents
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Feature Cards */}
-                <div className="grid md:grid-cols-3 gap-8 mt-16">
-                  <div className="p-8 rounded-3xl bg-white border border-[#09637E]/10 shadow-sm">
-                    <div className="w-12 h-12 bg-[#EBF4F6] rounded-2xl flex items-center justify-center text-[#09637E] mb-6">
-                      <ShieldCheck />
-                    </div>
-                    <h3 className="text-xl font-bold text-[#1C1C1C] mb-3">Immutable Records</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed font-medium">
-                      Project records cannot be altered once finalized, ensuring accountability and preventing unauthorized modifications.
-                    </p>
-                  </div>
-                  <div className="p-8 rounded-3xl bg-white border border-[#09637E]/10 shadow-sm">
-                    <div className="w-12 h-12 bg-[#088395] rounded-2xl flex items-center justify-center text-white mb-6">
-                      <Search />
-                    </div>
-                    <h3 className="text-xl font-bold text-[#1C1C1C] mb-3">Public Transparency</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed font-medium">
-                      Citizens can track project budgets, timelines, and status in real time with blockchain-verified data.
-                    </p>
-                  </div>
-                  <div className="p-8 rounded-3xl bg-white border border-[#09637E]/10 shadow-sm">
-                    <div className="w-12 h-12 bg-[#09637E] rounded-2xl flex items-center justify-center text-white mb-6">
-                      <Database />
-                    </div>
-                    <h3 className="text-xl font-bold text-[#1C1C1C] mb-3">Citizen Access</h3>
-                    <p className="text-sm text-gray-500 leading-relaxed font-medium">
-                      Easy-to-use search and filter tools for citizens to find projects that matter to their community.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Barangays Section */}
-                <div className="mt-16">
-                  <h2 className="text-2xl font-black text-[#09637E] mb-8 text-center">Covered Barangays · GMA, Cavite</h2>
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {['Poblacion 1', 'Poblacion 2', 'Poblacion 3', 'Poblacion 4', 'Poblacion 5'].map((b, i) => (
-                      <div
-                        key={b}
-                        className="p-6 rounded-3xl bg-white border border-[#09637E]/10 shadow-sm text-center hover:border-[#088395]/30 hover:shadow-md transition-all cursor-pointer"
-                        onClick={() => { setSelectedBarangayId(String(i + 1)); setView('dashboard'); }}
-                      >
-                        <div className="w-12 h-12 rounded-2xl bg-[#EBF4F6] flex items-center justify-center mx-auto mb-3">
-                          <span className="text-xl font-black text-[#09637E]">{i + 1}</span>
-                        </div>
-                        <p className="text-sm font-bold text-[#09637E]">{b}</p>
-                        <p className="text-[10px] text-gray-400 font-medium mt-1">GMA, Cavite</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Stats Banner */}
-                <div className="mt-16 p-8 md:p-12 rounded-[40px] bg-[#09637E] text-white">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-                    {[
-                      { value: loadingProjects ? '...' : String(projects.length), label: 'Total Projects' },
-                      { value: loadingProjects ? '...' : String(projects.filter(p => p.projectStatus === 'Ongoing').length), label: 'Ongoing Projects' },
-                      { value: loadingProjects ? '...' : String(projects.filter(p => p.blockchainVerified).length), label: 'Blockchain Verified' },
-                      { value: '5', label: 'Active Barangays' },
-                    ].map(s => (
-                      <div key={s.label} className="text-center">
-                        <p className="text-4xl font-black text-white">{s.value}</p>
-                        <p className="text-xs font-bold text-white/50 uppercase tracking-wider mt-2">{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
+                {/* Stats Section with Documents Integration */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mt-16">
+                    <StatCard icon={<Database size={24}/>} label="Projects Tracked" value={loadingProjects ? '...' : String(projects.length)} />
+                    <StatCard icon={<BookOpen size={24}/>} label="Legal Records" value={loadingBlockchain ? '...' : String(dbDocuments.length)} />
+                    <StatCard icon={<ShieldCheck size={24}/>} label="On-Chain Verified" value={String(projects.filter(p => p.blockchainVerified).length + dbDocuments.filter(d => d.blockchainStatus === 'Verified').length)} />
+                    <StatCard icon={<Users size={24}/>} label="Active Barangays" value="5" />
                 </div>
               </motion.div>
             )}
@@ -229,17 +164,40 @@ export function PublicApp() {
                   }}
                   isAdmin={false}
                   loading={loadingProjects}
-                  title="Projects Monitoring Dashboard"
-                  subtitle={`Citizen-facing project tracking and transparency for ${selectedBarangayId === 'all' ? 'all barangays' : barangays.find(b => b.id === selectedBarangayId)?.name}`}
+                  title="Projects Monitoring"
+                  subtitle="Transparent tracking of local community infrastructure."
+                />
+              </motion.div>
+            )}
+
+            {view === 'documents-monitoring' && (
+              <motion.div key="documents" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <DocumentsPage 
+                  documents={dbDocuments}
+                  barangays={barangays}
+                  onViewDetails={(doc) => {
+                    setSelectedDocument(doc);
+                    setView('document-detail');
+                  }}
+                  loading={loadingBlockchain}
                 />
               </motion.div>
             )}
 
             {view === 'project-detail' && selectedProject && (
-              <motion.div key="project-detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <motion.div key="project-detail" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
                 <ProjectDetailsPage
                   project={selectedProject}
                   onBack={() => setView('dashboard')}
+                />
+              </motion.div>
+            )}
+
+            {view === 'document-detail' && selectedDocument && (
+              <motion.div key="document-detail" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+                <PublicDocumentDetailsPage
+                  document={selectedDocument}
+                  onBack={() => setView('documents-monitoring')}
                 />
               </motion.div>
             )}
@@ -261,15 +219,21 @@ export function PublicApp() {
             </div>
             <span className="font-black text-[#09637E] tracking-tight">LegiChain</span>
           </div>
-          <div className="flex items-center gap-6 text-xs text-gray-400 font-medium">
-            <button onClick={() => setView('home')} className="hover:text-[#09637E] transition-colors cursor-pointer">Home</button>
-            <button onClick={() => setView('dashboard')} className="hover:text-[#09637E] transition-colors cursor-pointer">Projects</button>
-            <button onClick={() => setView('foi')} className="hover:text-[#09637E] transition-colors cursor-pointer">FOI Office</button>
-            <Link to="/login" className="hover:text-[#09637E] transition-colors">Admin Login</Link>
-          </div>
-          <p className="text-xs text-gray-400 font-medium">© 2026 LegiChain · GMA, Cavite</p>
+          <p className="text-xs text-gray-400 font-medium">© 2026 LegiChain · GMA, Cavite · Securing Governance via Blockchain</p>
         </div>
       </footer>
     </div>
   );
+}
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
+    return (
+        <div className="p-8 rounded-[32px] bg-white border border-[#09637E]/10 shadow-sm flex flex-col items-center text-center">
+            <div className="w-12 h-12 bg-[#EBF4F6] rounded-2xl flex items-center justify-center text-[#09637E] mb-4">
+                {icon}
+            </div>
+            <h3 className="text-3xl font-black text-[#1C1C1C] tracking-tighter">{value}</h3>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{label}</p>
+        </div>
+    );
 }

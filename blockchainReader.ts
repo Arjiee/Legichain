@@ -1,17 +1,9 @@
-/**
- * Blockchain Data Reader
- * Fetches document data from Polygon Amoy blockchain + IPFS Metadata
- */
-
 import { readContract } from 'wagmi/actions';
 import { wagmiConfig, LEGICHAIN_CONTRACT_ADDRESS, PINATA_CONFIG } from '../config/web3Config';
 import { parseAbi } from 'viem';
 import { Document } from './documentData';
 
-
-// LegiChainNFT Contract ABI for reading - FIXED
 const LEGICHAIN_READ_ABI = parseAbi([
-  // Remove 'tuple' and 'public'. Simply list the return types.
   'function getDocument(uint256 tokenId) view returns (string title, string ipfsHash, address uploadedBy, uint256 timestamp, string barangay, bool verified)',
   'function getTotalDocuments() view returns (uint256)',
   'function getDocumentsByUploader(address uploader) view returns (uint256[])',
@@ -55,7 +47,7 @@ export async function getBlockchainDocument(tokenId: number): Promise<Blockchain
       abi: LEGICHAIN_READ_ABI,
       functionName: 'getDocument',
       args: [BigInt(tokenId)],
-    });
+    }) as any;
 
     return {
       tokenId,
@@ -85,38 +77,51 @@ export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
   }
 }
 
-export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadata?: any): Document {
-  const date = new Date(blockchainDoc.timestamp * 1000);
+/**
+ * Maps blockchain data to application-friendly format
+ * CRITICAL: Ensures IDs match Supabase format for deduplication
+ */
+export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadata?: any): any {
+  // Use the database ID stored in metadata, or fallback to tokenId
+  const unifiedId = metadata?.id || metadata?.documentId || blockchainDoc.tokenId.toString();
+
   return {
-    id: blockchainDoc.tokenId.toString(),
-    documentId: `BC-${blockchainDoc.tokenId}`,
-    type: metadata?.type || 'Ordinance',
-    title: blockchainDoc.title,
+    ...metadata,
+    id: unifiedId,
+    documentId: metadata?.documentId || unifiedId,
+    projectId: metadata?.projectId || null,
+    
+    // Cryptographic Proofs
+    txHash: metadata?.txHash || '0x...',
+    blockNumber: metadata?.blockNumber || '---',
+    metadataCID: blockchainDoc.ipfsHash,
+    
+    // Source of Truth Data
     barangay: blockchainDoc.barangay,
-    datePublished: date.toISOString().split('T')[0],
-    publishedBy: metadata?.publishedBy || `${blockchainDoc.uploadedBy.slice(0, 6)}...${blockchainDoc.uploadedBy.slice(-4)}`,
-    status: metadata?.status || 'Active',
-    blockchainStatus: blockchainDoc.verified ? 'Verified' : 'Pending',
-    violationCount: 0,
-    description: metadata?.description || '',
-    ordinanceNumber: metadata?.ordinanceNumber || '',
-    effectivityDate: metadata?.effectivityDate || '',
+    title: blockchainDoc.title,
+    blockchainVerified: true,
+    verificationStatus: 'Verified on Chain',
+    
+    // Record Classification
+    type: metadata?.type || 'Ordinance',
+    actionRecorded: 'Minted'
   };
 }
 
-export async function getAllBlockchainDocumentsWithMetadata(): Promise<Document[]> {
+export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
   if (!isBlockchainConfigured()) return [];
   try {
     const total = await getTotalBlockchainDocuments();
+    // Parallel fetching for performance
     const docPromises = Array.from({ length: total }, (_, i) => getBlockchainDocument(i + 1));
     const blockchainDocs = (await Promise.all(docPromises)).filter(Boolean) as BlockchainDocument[];
 
-    const documents: Document[] = [];
+    const documents: any[] = [];
     for (const bcDoc of blockchainDocs) {
       const metadata = await fetchIPFSMetadata(bcDoc.ipfsHash);
       documents.push(blockchainDocToAppDoc(bcDoc, metadata));
     }
-    return documents.reverse();
+    return documents.reverse(); // Newest first
   } catch (error) {
     console.error('Error fetching registry:', error);
     return [];

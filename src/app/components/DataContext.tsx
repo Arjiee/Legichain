@@ -45,6 +45,7 @@ interface DataContextType {
   handleUpdateProject: (project: BarangayProject) => Promise<void>;
   handleDeleteProject: (projectId: string) => Promise<boolean>;
   handleCreateDocument: (doc: Document) => Promise<void>;
+  handleDeleteDocument: (docId: string) => Promise<boolean>; // ADDED
   handleVerifyDocument: (doc: Document) => Promise<void>;
   handleSealProjectToBlockchain: (project: BarangayProject) => Promise<void>;
   handleRefreshData: () => Promise<void>;
@@ -80,7 +81,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }), [projects]);
 
   /**
-   * Unified Sync: Captures Hash, Block, and IPFS CID
+   * Sync Engine: Deduplicates Database records against Blockchain reality
    */
   const syncEverything = async () => {
     try {
@@ -89,43 +90,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const supabaseDocs = await api.fetchDocuments();
       const supabaseProjects = await api.fetchProjects();
 
-      // 1. Map Blockchain Docs to Explorer Transactions (Including CID and Block)
+      // --- 1. DEDUPLICATE DOCUMENTS ---
+      const docsMap = new Map();
+      (supabaseDocs || []).forEach(doc => {
+        const key = doc.documentId?.toString() || doc.id?.toString();
+        docsMap.set(key, doc);
+      });
+      (blockchainDocs || []).filter(doc => doc.type !== 'Project').forEach(bDoc => {
+        const key = bDoc.documentId?.toString() || bDoc.id?.toString();
+        docsMap.set(key, bDoc);
+      });
+      setDbDocuments(Array.from(docsMap.values()));
+
+      // --- 2. DEDUPLICATE PROJECTS ---
+      const projectsMap = new Map();
+      (supabaseProjects || []).forEach(proj => {
+        const key = proj.projectId?.toString() || proj.id?.toString();
+        projectsMap.set(key, proj);
+      });
+      (blockchainDocs || []).filter(doc => doc.type === 'Project').forEach(bProj => {
+        const key = bProj.projectId?.toString() || bProj.id?.toString();
+        projectsMap.set(key, bProj);
+      });
+      setProjects(Array.from(projectsMap.values()).sort((a, b) => (b.id > a.id ? 1 : -1)));
+
+      // --- 3. MAP BLOCKCHAIN EXPLORER TRANSACTIONS ---
       const txs: BlockchainTransaction[] = (blockchainDocs || []).map(doc => ({
         id: doc.id,
-        txHash: doc.txHash || '0x...', // Captured from IPFS hydration
-        blockNumber: doc.blockNumber || '---', // Captured from IPFS hydration
-        ordinanceId: (doc as any).projectId || (doc as any).documentId || `BC-${doc.id}`,
+        txHash: doc.txHash || '0x...',
+        blockNumber: doc.blockNumber || '---',
+        ordinanceId: doc.documentId || doc.projectId || `BC-${doc.id}`,
         ordinanceTitle: doc.title,
         barangay: doc.barangay,
-        recordType: (doc as any).type === 'Project' ? 'Project Record' : 'Ordinance Record',
+        recordType: doc.type === 'Project' ? 'Project Record' : 'Ordinance Record',
         actionRecorded: 'Minted',
         timestamp: doc.datePublished || new Date().toISOString(),
         recordedBy: 'Admin Protocol',
         verificationStatus: 'Verified',
-        previousBlockHash: doc.ipfsHash, // This IS the Metadata CID (IPFS Hash)
+        previousBlockHash: doc.metadataCID || doc.ipfsHash, // IPFS Hash
         blockExplorerUrl: `https://amoy.polygonscan.com/tx/${doc.txHash}`
       }));
       setBlockchainTxs(txs);
-
-      // 2. Resolve Projects
-      const liveProjects = (blockchainDocs || [])
-        .filter(doc => (doc as any).type === 'Project')
-        .map(doc => doc as unknown as BarangayProject);
-
-      setProjects(() => {
-        const merged = [...liveProjects];
-        (supabaseProjects || []).forEach(p => {
-          if (!merged.find(m => m.projectId === p.projectId)) merged.push(p);
-        });
-        return merged.sort((a, b) => (b.id > a.id ? 1 : -1));
-      });
-
-      // 3. Resolve Ordinances
-      const mergedDocs = [...(blockchainDocs || []).filter(doc => (doc as any).type !== 'Project')];
-      (supabaseDocs || []).forEach(sDoc => {
-        if (!mergedDocs.find(bDoc => bDoc.documentId === sDoc.documentId)) mergedDocs.push(sDoc);
-      });
-      setDbDocuments(mergedDocs);
 
     } catch (e) {
       console.error("Sync failed:", e);
@@ -155,6 +160,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     toast.success('System synchronized');
   };
 
+  // --- PROJECT HANDLERS ---
   const handleCreateProject = async (project: BarangayProject) => {
     try {
       await api.createProject(project);
@@ -180,13 +186,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } catch (e) { return false; }
   };
 
+  // --- DOCUMENT HANDLERS ---
+  const handleCreateDocument = async (doc: Document) => {
+    await api.createDocument(doc);
+    setDbDocuments(prev => [doc, ...prev]);
+    toast.success("Document added to ledger.");
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!confirm("Remove this document record?")) return false;
+    try {
+      await api.deleteDocument(docId);
+      // Clean up local state using both possible ID keys
+      setDbDocuments(prev => prev.filter(doc => 
+        doc.documentId !== docId && doc.id !== docId
+      ));
+      toast.success("Document removed.");
+      return true;
+    } catch (e) {
+      toast.error("Failed to delete document.");
+      return false;
+    }
+  };
+
+  const handleVerifyDocument = async (doc: Document) => {
+    try {
+      toast.loading("Sending verification...");
+      const abi = parseAbi(['function verifyDocument(uint256 tokenId) public']);
+      const hash = await writeContract(wagmiConfig as any, {
+        address: LEGICHAIN_CONTRACT_ADDRESS,
+        abi,
+        functionName: 'verifyDocument',
+        args: [BigInt(doc.id)],
+      });
+      await waitForTransactionReceipt(wagmiConfig as any, { hash });
+      toast.dismiss();
+      toast.success(`Verified!`);
+      await syncEverything();
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(`Verification failed.`);
+    }
+  };
+
+  // --- BLOCKCHAIN SEALING ---
   const handleSealProjectToBlockchain = async (project: BarangayProject) => {
     try {
-      // 1. IPFS Upload (Metadata CID generation)
       toast.loading("Uploading fat metadata to IPFS...");
       const metadataHash = await uploadProjectToIPFS(project);
       
-      // 2. Minting on Polygon (Wait for Receipt to get Block Number)
       toast.loading("Anchoring proof on Polygon (Amoy)...");
       const { txHash, blockNumber } = await mintNFTOnPolygon(
         project.projectTitle,
@@ -195,18 +243,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`
       );
 
-      // 3. Update Database with cryptographic proof
       const verifiedUpdate = { 
         ...project, 
         blockchainVerified: true, 
         txHash, 
-        block: blockNumber, // This is the Confirmation Block
-        documentHash: metadataHash, // This is the Metadata CID
+        block: blockNumber, 
+        documentHash: metadataHash,
         verificationStatus: 'Verified on Chain'
       };
       await api.updateProject(project.id, verifiedUpdate);
 
-      // 4. Generate Audit Log with proof
       const log = {
         id: `LOG-${Date.now()}`,
         timestamp: new Date().toLocaleString(),
@@ -234,41 +280,52 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleCreateDocument = async (doc: Document) => {
-    await api.createDocument(doc);
-    setDbDocuments(prev => [doc, ...prev]);
-    toast.success("Document added to ledger.");
-  };
-
-  const handleVerifyDocument = async (doc: Document) => {
-    try {
-      toast.loading("Sending verification...");
-      const abi = parseAbi(['function verifyDocument(uint256 tokenId) public']);
-      const hash = await writeContract(wagmiConfig as any, {
-        address: LEGICHAIN_CONTRACT_ADDRESS,
-        abi,
-        functionName: 'verifyDocument',
-        args: [BigInt(doc.id)],
-      });
-      await waitForTransactionReceipt(wagmiConfig as any, { hash });
-      toast.dismiss();
-      toast.success(`Verified!`);
-      await syncEverything();
-    } catch (error: any) {
-      toast.dismiss();
-      toast.error(`Verification failed.`);
-    }
-  };
-
   return (
     <DataContext.Provider value={{
       projects, auditLogs, dbDocuments, blockchainTxs, barangays,
       loadingProjects, loadingBlockchain, projectStats,
       handleCreateProject, handleUpdateProject, handleDeleteProject,
-      handleCreateDocument, handleVerifyDocument,
+      handleCreateDocument, handleDeleteDocument, // ADDED TO PROVIDER
+      handleVerifyDocument,
       handleSealProjectToBlockchain, handleRefreshData
     }}>
       {children}
     </DataContext.Provider>
   );
 }
+const handleSealProjectToBlockchain = async (project: any) => {
+  try {
+    toast.loading("Step 1: Uploading Scanned Image & Metadata to IPFS...");
+    // Ensure metadata includes the image CID
+    const metadataHash = await uploadProjectToIPFS(project);
+    
+    toast.loading("Step 2: Securing on Polygon (Amoy)...");
+    const { txHash, blockNumber } = await mintNFTOnPolygon(
+      project.projectTitle || project.title,
+      metadataHash,
+      project.barangay,
+      LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`
+    );
+
+    // CRITICAL FIX: Save the HASH and the CID to Supabase
+    const verifiedUpdate = { 
+      ...project, 
+      blockchainVerified: true, 
+      txHash: txHash,         // The Transaction Hash from the receipt
+      block: blockNumber,     // The Block Number
+      documentHash: metadataHash, // The CID of the metadata
+      documentImage: project.documentImage, // Ensure this is saved
+      verificationStatus: 'Verified on Chain'
+    };
+
+    // Update Supabase
+    await api.updateProject(project.id, verifiedUpdate);
+    
+    toast.dismiss();
+    toast.success("Document Immutably Sealed!");
+    await syncEverything(); 
+  } catch (error: any) {
+    toast.dismiss();
+    toast.error(`Blockchain Error: ${error.message}`);
+  }
+};

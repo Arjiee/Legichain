@@ -1,47 +1,33 @@
-/**
- * Blockchain Data Reader - HIGH PERFORMANCE
- * Fetches light pointers from Polygon and "hydrates" data from IPFS.
- * Optimized for minimal gas consumption and maximum fetch speed.
- */
-
 import { readContract } from 'wagmi/actions';
-import { 
-  wagmiConfig, 
-  LEGICHAIN_CONTRACT_ADDRESS, 
-  PINATA_CONFIG 
-} from '../config/web3Config';
+import { wagmiConfig, LEGICHAIN_CONTRACT_ADDRESS, PINATA_CONFIG } from '../config/web3Config';
 import { parseAbi } from 'viem';
 
-// LegiChainNFT Contract ABI
+/**
+ * ABI SYNCHRONIZATION:
+ * Must match the 'struct Document' in your Solidity file exactly.
+ * The double parentheses signify a Struct (Tuple) return.
+ */
 const LEGICHAIN_READ_ABI = parseAbi([
   'function getDocument(uint256 tokenId) view returns ((string title, string ipfsHash, address uploadedBy, uint256 timestamp, string barangay, bool verified))',
   'function getTotalDocuments() view returns (uint256)',
-  'function getDocumentsByUploader(address uploader) view returns (uint256[])',
-  'function getDocumentsByBarangay(string barangay) view returns (uint256[])',
 ]);
 
 export interface BlockchainDocument {
   tokenId: number;
   title: string;
-  ipfsHash: string;      // This is the Metadata CID
+  ipfsHash: string;
   uploadedBy: string;
-  timestamp: number;
+  timestamp: bigint;
   barangay: string;
   verified: boolean;
-  txHash?: string;       // Captured from metadata
-  blockNumber?: string;  // Captured from metadata
 }
 
 export function isBlockchainConfigured(): boolean {
   return LEGICHAIN_CONTRACT_ADDRESS !== '0x0000000000000000000000000000000000000000';
 }
 
-/**
- * Get the current registry size
- */
 export async function getTotalBlockchainDocuments(): Promise<number> {
-  if (!isBlockchainConfigured()) throw new Error('Blockchain not configured');
-
+  if (!isBlockchainConfigured()) return 0;
   try {
     const total = await readContract(wagmiConfig as any, {
       address: LEGICHAIN_CONTRACT_ADDRESS,
@@ -50,123 +36,99 @@ export async function getTotalBlockchainDocuments(): Promise<number> {
     });
     return Number(total);
   } catch (error) {
-    console.error('Error reading total documents:', error);
     return 0;
   }
 }
 
-/**
- * Fetch a single lean record from the blockchain
- */
 export async function getBlockchainDocument(tokenId: number): Promise<BlockchainDocument | null> {
   if (!isBlockchainConfigured()) return null;
-
   try {
-    const doc = await readContract(wagmiConfig as any, {
+    // result will be the Struct/Tuple from Solidity
+    const result = await readContract(wagmiConfig as any, {
       address: LEGICHAIN_CONTRACT_ADDRESS,
       abi: LEGICHAIN_READ_ABI,
       functionName: 'getDocument',
       args: [BigInt(tokenId)],
-    });
+    }) as any;
 
+    // Mapping based on your Solidity Struct order
     return {
       tokenId,
-      title: doc.title,
-      ipfsHash: doc.ipfsHash, // This is your Metadata CID (IPFS Hash)
-      uploadedBy: doc.uploadedBy,
-      timestamp: Number(doc.timestamp),
-      barangay: doc.barangay,
-      verified: doc.verified,
+      title: result.title || result[0],
+      ipfsHash: result.ipfsHash || result[1],
+      uploadedBy: result.uploadedBy || result[2],
+      timestamp: BigInt(result.timestamp || result[3]),
+      barangay: result.barangay || result[4],
+      verified: result.verified || result[5],
     };
   } catch (error) {
-    console.error(`❌ Error decoding document ${tokenId}:`, error);
+    console.error(`❌ Blockchain ID ${tokenId} Sync Error:`, error);
     return null;
   }
 }
 
-/**
- * Resolve "Fat" metadata from IPFS (Cost: $0 Gas)
- */
 export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
   if (!ipfsHash) return null;
-
   try {
     const hash = ipfsHash.replace('ipfs://', '');
     const response = await fetch(`${PINATA_CONFIG.gateway}${hash}`);
-    if (!response.ok) throw new Error(`IPFS Gateway Error: ${response.statusText}`);
+    if (!response.ok) return null;
     return await response.json();
   } catch (error) {
-    console.error('❌ Failed to resolve IPFS metadata:', error);
     return null;
   }
 }
 
-/**
- * Merge Blockchain proof with IPFS data and explicitly map required fields
- */
 export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadata?: any): any {
-  // Common data for both Projects and Documents
-  const baseData = {
-    ...metadata,
-    id: blockchainDoc.tokenId.toString(),
-    tokenId: blockchainDoc.tokenId,
-    // REQUIRED DATA: Displayed in Explorer and Details
-    txHash: metadata?.txHash || '0x...', 
-    blockNumber: metadata?.blockNumber || '---', 
-    metadataCID: blockchainDoc.ipfsHash, // Metadata CID (IPFS Hash)
-    blockHeight: metadata?.blockNumber || '---',
+  // 1. Identify the CID (This is the "Content CID")
+  const cid = blockchainDoc.ipfsHash || metadata?.documentHash;
+
+  return {
+    ...metadata, // This pulls txHash and documentImage from your Supabase/JSON data
+    id: metadata?.id || `LEG-${blockchainDoc.tokenId}`,
+    documentId: metadata?.documentId || `LEG-${blockchainDoc.tokenId}`,
     
+    // 2. IMAGE RESOLUTION
+    // Try every possible key where the Image CID might be hiding
+    documentImage: metadata?.documentImage || metadata?.image || metadata?.file || metadata?.documentHash,
+    
+    // 3. TRANSACTION HASH
+    // Pull from metadata (Supabase) because it's not in the 'struct Document'
+    txHash: metadata?.txHash || (blockchainDoc as any).txHash || '0x...',
+    
+    // 4. BLOCKCHAIN PROOF
+    metadataCID: cid, 
     barangay: blockchainDoc.barangay,
     title: blockchainDoc.title,
     blockchainVerified: true,
     verificationStatus: 'Verified on Chain',
-  };
-
-  if (metadata?.type === 'Project') {
-    return {
-      ...baseData,
-      type: 'Project',
-      projectTitle: blockchainDoc.title,
-    };
-  }
-
-  // Logic for Ordinance Ledger
-  const date = new Date(blockchainDoc.timestamp * 1000);
-  return {
-    ...baseData,
-    documentId: `BC-${blockchainDoc.tokenId}`,
-    type: metadata?.type || 'Ordinance',
-    datePublished: date.toISOString().split('T')[0],
-    publishedBy: `${blockchainDoc.uploadedBy.slice(0, 6)}...${blockchainDoc.uploadedBy.slice(-4)}`,
-    status: metadata?.status || 'Active',
-    blockchainStatus: blockchainDoc.verified ? 'Verified' : 'Pending',
-    description: metadata?.description || '',
+    datePublished: metadata?.datePublished || new Date(Number(blockchainDoc.timestamp) * 1000).toLocaleDateString(),
   };
 }
 
-/**
- * "Full Throttle" Parallel Fetching Logic
- */
 export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
   if (!isBlockchainConfigured()) return [];
-
   try {
     const total = await getTotalBlockchainDocuments();
     if (total === 0) return [];
-    
-    // 1. Fetch all blockchain pointers in parallel
+
     const docPromises = Array.from({ length: total }, (_, i) => getBlockchainDocument(i + 1));
     const blockchainDocs = (await Promise.all(docPromises)).filter(Boolean) as BlockchainDocument[];
 
-    // 2. Fetch all IPFS metadata files in parallel
-    const hydratedDocs = await Promise.all(blockchainDocs.map(async (bcDoc) => {
-      const metadata = await fetchIPFSMetadata(bcDoc.ipfsHash);
-      return blockchainDocToAppDoc(bcDoc, metadata);
-    }));
-
-    return hydratedDocs.reverse(); // Newest records at the top
+    const documents: any[] = [];
+    for (const bcDoc of blockchainDocs) {
+      try {
+        const metadata = await fetchIPFSMetadata(bcDoc.ipfsHash);
+        documents.push(blockchainDocToAppDoc(bcDoc, metadata));
+      } catch (err) {
+        documents.push(blockchainDocToAppDoc(bcDoc, null));
+      }
+    }
+    
+    // Newest Token ID first
+    return documents.sort((a, b) => b.tokenId - a.tokenId);
   } catch (error) {
-    console.error('Error fetching live blockchain registry:', error);
+    console.error("Critical Sync Failure:", error);
     return [];
   }
 }
