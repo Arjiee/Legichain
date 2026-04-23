@@ -79,6 +79,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     verified: projects.filter(p => p.blockchainVerified).length,
   }), [projects]);
 
+  /**
+   * Unified Sync: Captures Hash, Block, and IPFS CID
+   */
   const syncEverything = async () => {
     try {
       setLoadingBlockchain(true);
@@ -86,12 +89,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const supabaseDocs = await api.fetchDocuments();
       const supabaseProjects = await api.fetchProjects();
 
-      // 1. Map Blockchain Docs to Explorer Transactions
+      // 1. Map Blockchain Docs to Explorer Transactions (Including CID and Block)
       const txs: BlockchainTransaction[] = (blockchainDocs || []).map(doc => ({
         id: doc.id,
-        txHash: doc.txHash || '0x...',
-        blockNumber: doc.blockNumber || '---',
-        ordinanceId: (doc as any).projectId || (doc as any).documentId || `LEG-${doc.id}`,
+        txHash: doc.txHash || '0x...', // Captured from IPFS hydration
+        blockNumber: doc.blockNumber || '---', // Captured from IPFS hydration
+        ordinanceId: (doc as any).projectId || (doc as any).documentId || `BC-${doc.id}`,
         ordinanceTitle: doc.title,
         barangay: doc.barangay,
         recordType: (doc as any).type === 'Project' ? 'Project Record' : 'Ordinance Record',
@@ -99,11 +102,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         timestamp: doc.datePublished || new Date().toISOString(),
         recordedBy: 'Admin Protocol',
         verificationStatus: 'Verified',
+        previousBlockHash: doc.ipfsHash, // This IS the Metadata CID (IPFS Hash)
         blockExplorerUrl: `https://amoy.polygonscan.com/tx/${doc.txHash}`
       }));
       setBlockchainTxs(txs);
 
-      // 2. Resolve Projects (Blockchain wins over Supabase)
+      // 2. Resolve Projects
       const liveProjects = (blockchainDocs || [])
         .filter(doc => (doc as any).type === 'Project')
         .map(doc => doc as unknown as BarangayProject);
@@ -178,28 +182,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const handleSealProjectToBlockchain = async (project: BarangayProject) => {
     try {
+      // 1. IPFS Upload (Metadata CID generation)
       toast.loading("Uploading fat metadata to IPFS...");
       const metadataHash = await uploadProjectToIPFS(project);
       
+      // 2. Minting on Polygon (Wait for Receipt to get Block Number)
       toast.loading("Anchoring proof on Polygon (Amoy)...");
-      const txHash = await mintNFTOnPolygon(
+      const { txHash, blockNumber } = await mintNFTOnPolygon(
         project.projectTitle,
         metadataHash,
         project.barangay,
         LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`
       );
 
-      // 1. Update Database
+      // 3. Update Database with cryptographic proof
       const verifiedUpdate = { 
         ...project, 
         blockchainVerified: true, 
         txHash, 
-        documentHash: metadataHash,
+        block: blockNumber, // This is the Confirmation Block
+        documentHash: metadataHash, // This is the Metadata CID
         verificationStatus: 'Verified on Chain'
       };
       await api.updateProject(project.id, verifiedUpdate);
 
-      // 2. NEW: Generate Audit Log for the Seal Action
+      // 4. Generate Audit Log with proof
       const log = {
         id: `LOG-${Date.now()}`,
         timestamp: new Date().toLocaleString(),

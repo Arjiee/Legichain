@@ -11,10 +11,8 @@ import {
   PINATA_CONFIG 
 } from '../config/web3Config';
 import { parseAbi } from 'viem';
-import { Document } from './documentData';
 
 // LegiChainNFT Contract ABI
-// Fixed Tuple syntax to match the Document struct in LegiChainNFT.sol
 const LEGICHAIN_READ_ABI = parseAbi([
   'function getDocument(uint256 tokenId) view returns ((string title, string ipfsHash, address uploadedBy, uint256 timestamp, string barangay, bool verified))',
   'function getTotalDocuments() view returns (uint256)',
@@ -25,11 +23,13 @@ const LEGICHAIN_READ_ABI = parseAbi([
 export interface BlockchainDocument {
   tokenId: number;
   title: string;
-  ipfsHash: string;
+  ipfsHash: string;      // This is the Metadata CID
   uploadedBy: string;
   timestamp: number;
   barangay: string;
   verified: boolean;
+  txHash?: string;       // Captured from metadata
+  blockNumber?: string;  // Captured from metadata
 }
 
 export function isBlockchainConfigured(): boolean {
@@ -72,7 +72,7 @@ export async function getBlockchainDocument(tokenId: number): Promise<Blockchain
     return {
       tokenId,
       title: doc.title,
-      ipfsHash: doc.ipfsHash,
+      ipfsHash: doc.ipfsHash, // This is your Metadata CID (IPFS Hash)
       uploadedBy: doc.uploadedBy,
       timestamp: Number(doc.timestamp),
       barangay: doc.barangay,
@@ -92,7 +92,6 @@ export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
 
   try {
     const hash = ipfsHash.replace('ipfs://', '');
-    // Using the Pinata gateway configured in web3Config
     const response = await fetch(`${PINATA_CONFIG.gateway}${hash}`);
     if (!response.ok) throw new Error(`IPFS Gateway Error: ${response.statusText}`);
     return await response.json();
@@ -103,43 +102,50 @@ export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
 }
 
 /**
- * Merge Blockchain proof with IPFS data
+ * Merge Blockchain proof with IPFS data and explicitly map required fields
  */
 export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadata?: any): any {
-  // Logic for Project Monitoring Dashboard
+  // Common data for both Projects and Documents
+  const baseData = {
+    ...metadata,
+    id: blockchainDoc.tokenId.toString(),
+    tokenId: blockchainDoc.tokenId,
+    // REQUIRED DATA: Displayed in Explorer and Details
+    txHash: metadata?.txHash || '0x...', 
+    blockNumber: metadata?.blockNumber || '---', 
+    metadataCID: blockchainDoc.ipfsHash, // Metadata CID (IPFS Hash)
+    blockHeight: metadata?.blockNumber || '---',
+    
+    barangay: blockchainDoc.barangay,
+    title: blockchainDoc.title,
+    blockchainVerified: true,
+    verificationStatus: 'Verified on Chain',
+  };
+
   if (metadata?.type === 'Project') {
     return {
-      ...metadata,
-      id: blockchainDoc.tokenId.toString(),
-      blockchainVerified: true,
-      verificationStatus: 'Verified on Chain',
-      txHash: metadata.txHash || '',
-      barangay: blockchainDoc.barangay, // Chain is source of truth for barangay
-      title: blockchainDoc.title       // Chain is source of truth for title
+      ...baseData,
+      type: 'Project',
+      projectTitle: blockchainDoc.title,
     };
   }
 
   // Logic for Ordinance Ledger
   const date = new Date(blockchainDoc.timestamp * 1000);
   return {
-    id: blockchainDoc.tokenId.toString(),
+    ...baseData,
     documentId: `BC-${blockchainDoc.tokenId}`,
     type: metadata?.type || 'Ordinance',
-    title: blockchainDoc.title,
-    barangay: blockchainDoc.barangay,
     datePublished: date.toISOString().split('T')[0],
     publishedBy: `${blockchainDoc.uploadedBy.slice(0, 6)}...${blockchainDoc.uploadedBy.slice(-4)}`,
     status: metadata?.status || 'Active',
     blockchainStatus: blockchainDoc.verified ? 'Verified' : 'Pending',
     description: metadata?.description || '',
-    ordinanceNumber: metadata?.ordinanceNumber || '',
-    effectivityDate: metadata?.effectivityDate || '',
   };
 }
 
 /**
  * "Full Throttle" Parallel Fetching Logic
- * Fetches all pointers from Blockchain AND all metadata from IPFS in parallel.
  */
 export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
   if (!isBlockchainConfigured()) return [];
@@ -152,7 +158,7 @@ export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
     const docPromises = Array.from({ length: total }, (_, i) => getBlockchainDocument(i + 1));
     const blockchainDocs = (await Promise.all(docPromises)).filter(Boolean) as BlockchainDocument[];
 
-    // 2. Fetch all IPFS metadata files in parallel (Maximum speed)
+    // 2. Fetch all IPFS metadata files in parallel
     const hydratedDocs = await Promise.all(blockchainDocs.map(async (bcDoc) => {
       const metadata = await fetchIPFSMetadata(bcDoc.ipfsHash);
       return blockchainDocToAppDoc(bcDoc, metadata);
