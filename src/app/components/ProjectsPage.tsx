@@ -15,10 +15,12 @@ import {
   MapPin,
   Briefcase,
   Loader2,
-  Plus
+  Plus,
+  Database // Added for Sealing action
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { BarangayProject } from '../utils/projectData';
+import { useData } from './DataContext'; // Import hook for blockchain actions
 
 interface ProjectsPageProps {
   projects: BarangayProject[];
@@ -43,6 +45,7 @@ export function ProjectsPage({
   title = "Project Monitoring Dashboard",
   subtitle = "Comprehensive barangay project tracking and transparency"
 }: ProjectsPageProps) {
+  const { handleSealProjectToBlockchain } = useData(); // Real blockchain handler
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -71,7 +74,6 @@ export function ProjectsPage({
     });
   }, [projects, selectedBarangayId, searchQuery, selectedCategory, selectedStatus, barangays]);
 
-  // Compute stats from passed projects prop (real data)
   const stats = useMemo(() => ({
     total: projects.length,
     active: projects.filter(p => p.projectStatus === 'Ongoing').length,
@@ -174,7 +176,6 @@ export function ProjectsPage({
           </button>
         </div>
 
-        {/* Filter Options */}
         {showFilters && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -236,6 +237,8 @@ export function ProjectsPage({
                 getCategoryColor={getCategoryColor}
                 getStatusColor={getStatusColor}
                 formatCurrency={formatCurrency}
+                isAdmin={isAdmin}
+                onSeal={handleSealProjectToBlockchain} // Passed the sealant handler
               />
             ))}
           </div>
@@ -260,7 +263,7 @@ function StatCard({ icon, label, value, color }: any) {
   );
 }
 
-function ProjectRow({ project, onViewDetails, getCategoryColor, getStatusColor, formatCurrency }: any) {
+function ProjectRow({ project, onViewDetails, getCategoryColor, getStatusColor, formatCurrency, isAdmin, onSeal }: any) {
   return (
     <div className="p-6 hover:bg-[#EBF4F6]/30 transition-colors group cursor-pointer" onClick={() => onViewDetails(project)}>
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
@@ -320,11 +323,22 @@ function ProjectRow({ project, onViewDetails, getCategoryColor, getStatusColor, 
           </div>
         </div>
 
-        {/* Action Button */}
-        <button className="px-6 py-3 bg-[#088395] text-white font-bold rounded-2xl flex items-center gap-2 hover:bg-[#09637E] transition-all shadow-sm opacity-0 group-hover:opacity-100">
-          <Eye className="w-4 h-4" />
-          View Details
-        </button>
+        {/* Actions Button Group */}
+        <div className="flex flex-col gap-2">
+          {isAdmin && !project.blockchainVerified && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onSeal(project); }}
+              className="px-4 py-2 bg-amber-500 text-white text-[10px] font-black rounded-xl hover:bg-amber-600 transition-all flex items-center gap-2 shadow-sm whitespace-nowrap"
+            >
+              <Database className="w-3 h-3" />
+              Seal to Blockchain
+            </button>
+          )}
+          <button className="px-6 py-3 bg-[#088395] text-white font-bold rounded-2xl flex items-center gap-2 hover:bg-[#09637E] transition-all shadow-sm opacity-0 group-hover:opacity-100">
+            <Eye className="w-4 h-4" />
+            View Details
+          </button>
+        </div>
       </div>
     </div>
   );
