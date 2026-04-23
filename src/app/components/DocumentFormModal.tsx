@@ -408,10 +408,12 @@ export function DocumentFormModal({ isOpen, onClose, onSave, editDoc }: Document
 
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Published By</label>
-                  <select value={form.publishedBy} onChange={e => update('publishedBy', e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none">
-                    {ADMINS.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
+                    <input type="text"
+                      placeholder="Enter signatory name..."
+                      value={form.publishedBy}
+                      onChange={e => update('publishedBy', e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                    />
                 </div>
 
                 <div>

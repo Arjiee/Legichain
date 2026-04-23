@@ -23,6 +23,7 @@ import { Web3StatusChecker } from './Web3StatusChecker';
 import { BarangayProject } from '../utils/projectData';
 import { Document } from '../utils/documentData';
 import { BlockchainTransaction } from '../utils/blockchainData';
+import { useAccount, useChainId } from 'wagmi';
 
 type AdminView =
   | 'dashboard' | 'docs' | 'docs-detail'
@@ -91,6 +92,7 @@ export function AdminApp() {
       <span className="text-sm">{label}</span>
     </button>
   );
+  
 
   const Sidebar = () => (
     <div className="fixed left-0 top-16 bottom-0 w-64 bg-[#09637E] border-r border-[#09637E]/20 flex flex-col p-4 z-30 overflow-y-auto">
@@ -105,10 +107,10 @@ export function AdminApp() {
 
       <div className="mt-auto space-y-3">
         <div className="p-4 rounded-2xl bg-white/10 border border-white/20">
-          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-2">Network Status</p>
+          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-2">Network</p>
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-white font-medium">Mainnet Connected</span>
+            <span className="text-xs text-white font-medium">Polygon Amoy</span>
           </div>
         </div>
         <div className="p-3 rounded-2xl bg-white/5 border border-white/10">

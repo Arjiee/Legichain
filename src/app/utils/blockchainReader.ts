@@ -4,8 +4,9 @@ import { parseAbi } from 'viem';
 
 /**
  * ABI SYNCHRONIZATION:
- * Must match the 'struct Document' in your Solidity file exactly.
- * The double parentheses signify a Struct (Tuple) return.
+ * Matches the 'struct Document' in LegiChainNFT.sol exactly:
+ * 1. title, 2. ipfsHash, 3. uploadedBy, 4. timestamp, 5. barangay, 6. verified
+ * The double parentheses indicate a Struct (Tuple) return.
  */
 const LEGICHAIN_READ_ABI = parseAbi([
   'function getDocument(uint256 tokenId) view returns ((string title, string ipfsHash, address uploadedBy, uint256 timestamp, string barangay, bool verified))',
@@ -40,10 +41,12 @@ export async function getTotalBlockchainDocuments(): Promise<number> {
   }
 }
 
+/**
+ * Fetches data for a specific Token ID and maps it to the BlockchainDocument interface
+ */
 export async function getBlockchainDocument(tokenId: number): Promise<BlockchainDocument | null> {
   if (!isBlockchainConfigured()) return null;
   try {
-    // result will be the Struct/Tuple from Solidity
     const result = await readContract(wagmiConfig as any, {
       address: LEGICHAIN_CONTRACT_ADDRESS,
       abi: LEGICHAIN_READ_ABI,
@@ -51,7 +54,6 @@ export async function getBlockchainDocument(tokenId: number): Promise<Blockchain
       args: [BigInt(tokenId)],
     }) as any;
 
-    // Mapping based on your Solidity Struct order
     return {
       tokenId,
       title: result.title || result[0],
@@ -67,6 +69,9 @@ export async function getBlockchainDocument(tokenId: number): Promise<Blockchain
   }
 }
 
+/**
+ * Fetches JSON metadata from IPFS via the Pinata Gateway
+ */
 export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
   if (!ipfsHash) return null;
   try {
@@ -80,38 +85,51 @@ export async function fetchIPFSMetadata(ipfsHash: string): Promise<any> {
 }
 
 export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadata?: any): any {
-  // 1. Identify the CID (This is the "Content CID")
-  const cid = blockchainDoc.ipfsHash || metadata?.documentHash;
+  // 1. Identify the CID
+  const cid = blockchainDoc.ipfsHash || metadata?.documentHash || metadata?.metadataCID;
+
+  // 2. Resolve Image (supports all aliases found in your logs)
+  const img = metadata?.images || metadata?.documentImage || metadata?.image || metadata?.file || metadata?.documentHash;
 
   return {
-    ...metadata, // This pulls txHash and documentImage from your Supabase/JSON data
-    id: metadata?.id || `LEG-${blockchainDoc.tokenId}`,
+    ...metadata,
+    // Use numeric fallbacks for ID to support "Latest on Top" sorting
+    id: metadata?.id || blockchainDoc.tokenId.toString(),
     documentId: metadata?.documentId || `LEG-${blockchainDoc.tokenId}`,
+    tokenId: blockchainDoc.tokenId,
     
-    // 2. IMAGE RESOLUTION
-    // Try every possible key where the Image CID might be hiding
-    documentImage: metadata?.documentImage || metadata?.image || metadata?.file || metadata?.documentHash,
+    // Property Aliasing
+    images: img,
+    documentImage: img,
     
     // 3. TRANSACTION HASH
-    // Pull from metadata (Supabase) because it's not in the 'struct Document'
-    txHash: metadata?.txHash || (blockchainDoc as any).txHash || '0x...',
+    // We leave this as is from metadata; if the reader can't find it, 
+    // it returns undefined/null so the merge doesn't overwrite Supabase.
+    txHash: metadata?.txHash || (blockchainDoc as any).txHash,
     
-    // 4. BLOCKCHAIN PROOF
+    // 4. STATUS FORCING
+    blockchainVerified: true,
+    blockchainStatus: 'Verified', 
+    verificationStatus: 'Verified on Chain',
+    
     metadataCID: cid, 
     barangay: blockchainDoc.barangay,
     title: blockchainDoc.title,
-    blockchainVerified: true,
-    verificationStatus: 'Verified on Chain',
     datePublished: metadata?.datePublished || new Date(Number(blockchainDoc.timestamp) * 1000).toLocaleDateString(),
+    type: metadata?.type || 'Ordinance'
   };
 }
 
+/**
+ * Orchestrator: Fetches all blockchain records and hydrates them with metadata
+ */
 export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
   if (!isBlockchainConfigured()) return [];
   try {
     const total = await getTotalBlockchainDocuments();
     if (total === 0) return [];
 
+    // Fetch all records in parallel
     const docPromises = Array.from({ length: total }, (_, i) => getBlockchainDocument(i + 1));
     const blockchainDocs = (await Promise.all(docPromises)).filter(Boolean) as BlockchainDocument[];
 
@@ -121,11 +139,12 @@ export async function getAllBlockchainDocumentsWithMetadata(): Promise<any[]> {
         const metadata = await fetchIPFSMetadata(bcDoc.ipfsHash);
         documents.push(blockchainDocToAppDoc(bcDoc, metadata));
       } catch (err) {
+        // Push the record even if IPFS is slow or fails
         documents.push(blockchainDocToAppDoc(bcDoc, null));
       }
     }
     
-    // Newest Token ID first
+    // Sort by Token ID descending (Latest on Top) for initial state
     return documents.sort((a, b) => b.tokenId - a.tokenId);
   } catch (error) {
     console.error("Critical Sync Failure:", error);
