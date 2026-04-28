@@ -6,7 +6,7 @@ export function FOISection() {
   const [activeTab, setActiveTab] = useState(0);
   const tabs = [
     { label: 'About FOI', icon: <Info size={16} /> },
-    { label: 'Request a Document', icon: <FileText size={16} /> },
+    // { label: 'Request a Document', icon: <FileText size={16} /> },
     { label: 'Transparency Reports', icon: <LayoutDashboard size={16} /> },
   ];
 
@@ -65,7 +65,7 @@ export function FOISection() {
           </motion.div>
         )}
 
-        {activeTab === 1 && (
+        {/* {activeTab === 1 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
             <h2 className="text-2xl font-black text-[#09637E]">Submit an Information Request</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -102,9 +102,9 @@ export function FOISection() {
               </button>
             </div>
           </motion.div>
-        )}
+        )} */}
 
-        {activeTab === 2 && (
+        {activeTab === 1 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
             <h2 className="text-2xl font-black text-[#09637E]">Transparency Statistics</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
