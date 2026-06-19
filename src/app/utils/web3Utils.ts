@@ -6,7 +6,7 @@
 
 import { PINATA_CONFIG, wagmiConfig } from '../config/web3Config';
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
-import { parseAbi, parseGwei } from 'viem'; // Added parseGwei for gas fixes
+import { parseAbi, parseGwei } from 'viem';
 import { Document } from './documentData';
 import { BarangayProject } from './projectData';
 
@@ -27,9 +27,8 @@ export const uploadImagesToIPFS = async (files: File[]): Promise<string> => {
     throw new Error('Pinata API keys missing in .env');
   }
 
-  // 1. Create a timeout controller
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000); // 300,000 ms = 5 minutes
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
   try {
     const formData = new FormData();
@@ -49,7 +48,6 @@ export const uploadImagesToIPFS = async (files: File[]): Promise<string> => {
     });
     formData.append('pinataMetadata', metadata);
 
-    // 2. Pass the signal to your fetch request
     const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: "POST",
       headers: {
@@ -57,10 +55,9 @@ export const uploadImagesToIPFS = async (files: File[]): Promise<string> => {
         pinata_secret_api_key: PINATA_CONFIG.secretKey,
       },
       body: formData,
-      signal: controller.signal, // <-- Add this line
+      signal: controller.signal,
     });
 
-    // Clear the timeout if the request succeeds before the 5 minutes are up
     clearTimeout(timeoutId);
 
     if (!response.ok) {
@@ -114,8 +111,7 @@ export async function uploadProjectToIPFS(
 }
 
 /**
- * Mint NFT on Polygon Amoy - GAS OPTIMIZED & DATA RICH
- * Returns both txHash and blockNumber for the Explorer
+ * Mint NFT on Polygon Amoy - GAS OPTIMIZED & CAPTURES HASH IMMEDIATELY
  */
 export async function mintNFTOnPolygon(
   title: string,
@@ -127,9 +123,8 @@ export async function mintNFTOnPolygon(
     throw new Error('Contract address not configured');
   }
 
-  // To minimize gas, we pass only lean pointers.
-  // We explicitly set gas prices to meet Polygon Amoy's 25 Gwei floor.
-  const hash = await writeContract(wagmiConfig as any, {
+  // 1. Fire wallet signature request. The resolved promise exposes the txHash immediately.
+  const txHash = await writeContract(wagmiConfig as any, {
     address: contractAddress,
     abi: LEGICHAIN_ABI,
     functionName: 'mintDocument',
@@ -139,16 +134,18 @@ export async function mintNFTOnPolygon(
       metadataUri, 
       barangay
     ],
-    // FIXED: Explicit gas overrides for Amoy Testnet
     maxPriorityFeePerGas: parseGwei('30'), 
     maxFeePerGas: parseGwei('35'),
   });
 
-  // Capture the receipt to get the confirmation block
-  const receipt = await waitForTransactionReceipt(wagmiConfig as any, { hash });
+  // Log captured hash to runtime console before mining confirmation finishes
+  console.log("🚀 Web3 Layer Captured Transaction Hash directly from signature:", txHash);
+
+  // 2. Await full block processing on-chain
+  const receipt = await waitForTransactionReceipt(wagmiConfig as any, { hash: txHash });
   
   return { 
-    txHash: receipt.transactionHash, 
+    txHash: txHash, // Use immediately captured signature hash reference
     blockNumber: receipt.blockNumber.toString() 
   };
 }
@@ -188,6 +185,7 @@ export async function uploadDocumentDataToIPFS(
 
 /**
  * Orchestrates the full flow: Asset -> Metadata -> Blockchain
+ * Emits the metadataCID as documentHash for context consistency.
  */
 export async function completeWeb3Upload(
   documentData: Partial<Document>,
@@ -195,7 +193,7 @@ export async function completeWeb3Upload(
   imageFiles: File[],
   contractAddress: `0x${string}`,
   onProgress: (step: 'ipfs' | 'metadata' | 'minting') => void
-): Promise<{ imagesHash: string; documentHash: string; txHash: string; blockNumber: string }> {
+): Promise<{ imagesHash: string; documentHash: string; metadataCID?: string; txHash: string; blockNumber: string }> {
   
   onProgress('ipfs');
   const imagesHash = await uploadImagesToIPFS(imageFiles);
@@ -211,17 +209,20 @@ export async function completeWeb3Upload(
     contractAddress
   );
 
-  return { imagesHash, documentHash, txHash, blockNumber };
+  return { 
+    imagesHash, 
+    documentHash, 
+    metadataCID: documentHash, // Aliased to match contract reader hooks
+    txHash, 
+    blockNumber 
+  };
 }
 
 export function getIPFSUrl(hash: string): string {
   if (!hash) return '';
 
-  // 1. Remove the 'ipfs://' prefix if it exists
   const cleanHash = hash.replace(/^ipfs:\/\//, '');
 
-  // 2. Ensure the gateway ends with a slash and combine
-  // This prevents "https://gateway.com/ipfsQm..." errors
   const gateway = PINATA_CONFIG.gateway.endsWith('/') 
     ? PINATA_CONFIG.gateway 
     : `${PINATA_CONFIG.gateway}/`;

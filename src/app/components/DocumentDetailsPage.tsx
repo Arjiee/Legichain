@@ -15,7 +15,8 @@ import {
   Archive,
   Clock,
   MapPin,
-  Database
+  Database,
+  Eye
 } from 'lucide-react';
 import { Document } from '../utils/documentData';
 import { toast } from 'sonner';
@@ -42,11 +43,13 @@ export function DocumentDetailsPage({
   const [copiedDocId, setCopiedDocId] = useState(false);
   const [copiedCID, setCopiedCID] = useState(false);
 
-  // --- DATA RESOLUTION (Ensures evidence shows even if keys vary) ---
-  const resolvedTxHash = document.txHash || 
-                         (document as any).transactionHash || 
-                         (document as any).hash || 
-                         document.tags?.find(t => t.startsWith('0x'));
+  // --- DATA RESOLUTION ---
+  // FIXED: Forces direct strict evaluation of real txHash strings to prevent "0x... (Awaiting Sync)" masks
+  const resolvedTxHash = document.txHash && document.txHash !== '0x...' 
+                         ? document.txHash 
+                         : (document as any).transactionHash || 
+                           (document as any).hash || 
+                           document.tags?.find(t => t.startsWith('0x'));
 
   const resolvedCID = document.metadataCID || 
                       document.documentHash || 
@@ -55,10 +58,10 @@ export function DocumentDetailsPage({
 
   const resolvedBlock = document.block || (document as any).blockNumber;
   
-  const isSealed = (document.blockchainStatus === 'Verified' || !!resolvedTxHash);
+  const isSealed = (document.blockchainStatus === 'Verified' || (resolvedTxHash && resolvedTxHash !== '0x...'));
 
   const copyToClipboard = (text: string, type: string) => {
-    if (!text || text === '---') return;
+    if (!text || text === '---' || text === '0x...') return;
     navigator.clipboard.writeText(text);
     
     if (type === 'hash') setCopiedHash(true);
@@ -87,15 +90,15 @@ export function DocumentDetailsPage({
         Back to Documents Registry
       </button>
 
-      {/* Header */}
+      {/* Header Banner */}
       <div className="bg-gradient-to-br from-[#EBE5C2] to-[#F8F3D9] p-8 rounded-3xl border border-[#504B38]/10 shadow-sm">
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-6">
           <div className="flex items-center space-x-4 flex-1">
             <div className="p-4 bg-white rounded-2xl shadow-md">
               <FileText className="w-8 h-8 text-[#B9B28A]" />
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex flex-wrap items-center gap-3 mb-2">
                 <h1 className="text-2xl font-black text-[#504B38] tracking-tight">{document.title}</h1>
                 <button
                   onClick={() => copyToClipboard(document.documentId, 'docId')}
@@ -108,9 +111,9 @@ export function DocumentDetailsPage({
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Administrative Control Triggers */}
           {isAdmin && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               {onEdit && (
                 <button
                   onClick={() => onEdit(document)}
@@ -131,7 +134,7 @@ export function DocumentDetailsPage({
           )}
         </div>
 
-        {/* Status Pills */}
+        {/* Status Badges */}
         <div className="flex flex-wrap gap-3">
           <span className={`inline-flex items-center px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-wider ${
             isSealed ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-100'
@@ -145,9 +148,13 @@ export function DocumentDetailsPage({
         </div>
       </div>
 
+      {/* Main Layout grid columns */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column - Main Details */}
+        
+        {/* Left Column Stack */}
         <div className="lg:col-span-2 space-y-8">
+          
+          {/* Metadata Grid parameters */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#504B38]/10">
             <h3 className="text-sm font-black text-[#504B38] uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
               <Database className="w-4 h-4 text-[#B9B28A]" /> Registry Information
@@ -169,30 +176,74 @@ export function DocumentDetailsPage({
             </div>
           </div>
 
-          {/* Attached Files Section */}
+          {/* Image Viewer Gallery Cards for Local Backups */}
           {document.attachedFiles && document.attachedFiles.length > 0 && (
-            <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#504B38]/10">
-              <h3 className="text-sm font-black text-[#504B38] uppercase tracking-[0.2em] mb-6">Visual Evidence</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {document.attachedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-[#B9B28A]/30 transition-all group">
-                    <div className="flex items-center space-x-3">
-                      <div className="p-2 bg-white rounded-lg shadow-sm">
-                        <FileText className="w-5 h-5 text-[#B9B28A]" />
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#504B38]/10 space-y-6">
+              <div>
+                <h3 className="text-sm font-black text-[#504B38] uppercase tracking-[0.2em]">Local Database Storage Backups</h3>
+                <p className="text-[11px] font-bold text-gray-400 mt-0.5">Permanent media copies saved inside your local Supabase secure asset buckets.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {document.attachedFiles.map((url, index) => {
+                  const cleanFileName = url.split('/').pop()?.split('-').slice(1).join('-') || `Attachment-${index + 1}`;
+                  
+                  return (
+                    <div key={index} className="bg-gray-50 border border-gray-100 rounded-2xl overflow-hidden shadow-sm flex flex-col hover:border-[#B9B28A]/40 transition-all group">
+                      
+                      {/* Image Preview container */}
+                      <div className="relative aspect-[4/3] bg-gray-200 overflow-hidden border-b border-gray-100">
+                        <img 
+                          src={url} 
+                          alt={cleanFileName} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <a 
+                            href={url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            className="p-3 bg-white text-[#504B38] rounded-xl hover:bg-[#F8F3D9] transition-all transform translate-y-2 group-hover:translate-y-0 duration-300"
+                          >
+                            <Eye size={16} />
+                          </a>
+                          <a 
+                            href={url} 
+                            download 
+                            className="p-3 bg-white text-[#504B38] rounded-xl hover:bg-[#F8F3D9] transition-all transform translate-y-2 group-hover:translate-y-0 duration-300 delay-75"
+                          >
+                            <Download size={16} />
+                          </a>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-gray-700 truncate max-w-[120px]">{file}</span>
+
+                      {/* Attachment Label metrics */}
+                      <div className="p-4 flex items-center justify-between gap-3 bg-white">
+                        <div className="flex items-center space-x-2 overflow-hidden flex-1">
+                          <FileText size={16} className="text-[#B9B28A] shrink-0" />
+                          <span className="text-[11px] font-bold text-gray-700 truncate">{cleanFileName}</span>
+                        </div>
+                        <a 
+                          href={url} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          className="text-[10px] font-black uppercase text-[#B9B28A] hover:text-[#504B38] tracking-widest shrink-0"
+                        >
+                          View Full
+                        </a>
+                      </div>
+
                     </div>
-                    <button className="p-2 text-[#B9B28A] hover:text-[#504B38] transition-colors">
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right Column - Protocol Evidence (Blockchain) */}
+        {/* Right Column Stack (Protocol Evidence) */}
         <div className="space-y-8">
           <div className="bg-[#1C1C1C] p-8 rounded-[32px] text-white shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
@@ -208,7 +259,7 @@ export function DocumentDetailsPage({
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Transaction Hash (TxID)</label>
-                  {resolvedTxHash && (
+                  {resolvedTxHash && resolvedTxHash !== '0x...' && (
                     <button onClick={() => copyToClipboard(resolvedTxHash, 'hash')} className="text-gray-500 hover:text-white transition-colors">
                       {copiedHash ? <Check size={12} /> : <Copy size={12} />}
                     </button>
@@ -216,7 +267,7 @@ export function DocumentDetailsPage({
                 </div>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/5">
                   <code className="text-[10px] font-mono text-gray-300 break-all leading-relaxed">
-                    {resolvedTxHash || '0x... (Awaiting Sync)'}
+                    {resolvedTxHash && resolvedTxHash !== '0x...' ? resolvedTxHash : '0x... (Awaiting Sync)'}
                   </code>
                 </div>
               </div>
@@ -241,10 +292,12 @@ export function DocumentDetailsPage({
               {/* BLOCK NUMBER */}
               <div className="flex justify-between items-center py-4 border-y border-white/5">
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Block Height</span>
-                <span className="text-xs font-mono font-bold text-gray-300">#{resolvedBlock || '---'}</span>
+                <span className="text-xs font-mono font-bold text-gray-300">
+                  {resolvedBlock && resolvedBlock !== '---' ? `#${resolvedBlock}` : '---'}
+                </span>
               </div>
 
-              {/* EXPLORER BUTTON */}
+              {/* EXPLORER LINK BUTTON */}
               {resolvedTxHash && resolvedTxHash !== '0x...' ? (
                 <a 
                   href={`https://amoy.polygonscan.com/tx/${resolvedTxHash}`}
@@ -262,7 +315,7 @@ export function DocumentDetailsPage({
             </div>
           </div>
 
-          {/* Metadata Tags (Clean view) */}
+          {/* Categorization Tags */}
           {document.tags && document.tags.filter(t => !t.startsWith('0x')).length > 0 && (
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#504B38]/10">
               <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -278,12 +331,12 @@ export function DocumentDetailsPage({
             </div>
           )}
         </div>
+
       </div>
     </div>
   );
 }
 
-// Internal Helper
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div className="flex items-start space-x-3 group">

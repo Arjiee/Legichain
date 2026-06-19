@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router';
 import {
   ShieldCheck, FileText, Users, LayoutDashboard, History,
   TrendingUp, AlertTriangle, Database, Loader2, RefreshCw,
-  Edit2, Trash2, Plus, LogOut
+  Edit2, Trash2, Plus, LogOut, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
@@ -23,7 +23,7 @@ import { Web3StatusChecker } from './Web3StatusChecker';
 import { BarangayProject } from '../utils/projectData';
 import { Document } from '../utils/documentData';
 import { BlockchainTransaction } from '../utils/blockchainData';
-import { useAccount, useChainId } from 'wagmi';
+import * as api from '../utils/api'; // Direct access for specialized dictionary edits
 
 type AdminView =
   | 'dashboard' | 'docs' | 'docs-detail'
@@ -35,11 +35,9 @@ export function AdminApp() {
   const navigate = useNavigate();
   const {
     projects, auditLogs, dbDocuments, blockchainTxs, barangays,
-    loadingProjects, loadingAuditLogs, loadingDocuments, loadingBlockchain, loadingBarangays,
-    projectStats,
+    loadingProjects, loadingBlockchain, projectStats,
     handleCreateProject, handleUpdateProject, handleDeleteProject,
     handleCreateDocument, handleUpdateDocument, handleDeleteDocument, handleVerifyDocument,
-    handleAddBarangay, handleEditBarangay, handleDeleteBarangay,
     handleRefreshData,
   } = useData();
 
@@ -49,12 +47,20 @@ export function AdminApp() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [selectedBlockchainTx, setSelectedBlockchainTx] = useState<BlockchainTransaction | null>(null);
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
+  
+  // Form/Modal Toggles
   const [showProjectForm, setShowProjectForm] = useState(false);
   const [editingProject, setEditingProject] = useState<BarangayProject | null>(null);
   const [showDocForm, setShowDocForm] = useState(false);
   const [editingDoc, setEditingDoc] = useState<Document | null>(null);
 
-  // Keep selected project/document in sync after edits
+  // FIXED: Internal states handling Barangay interactive modifications
+  const [showBrgyModal, setShowBrgyModal] = useState(false);
+  const [brgyNameInput, setBrgyNameInput] = useState('');
+  const [editingBrgyId, setEditingBrgyId] = useState<string | null>(null);
+  const [isSavingBrgy, setIsSavingBrgy] = useState(false);
+
+  // Keep selected data fields in sync after edits
   useEffect(() => {
     if (selectedProject) {
       const updated = projects.find(p => p.id === selectedProject.id);
@@ -79,6 +85,68 @@ export function AdminApp() {
     toast.success('Logged out successfully');
   };
 
+  // --- FIXED: CORE LOCAL BARANGAY HANDLERS MANAGEMENT ---
+  const openAddBarangayModal = () => {
+    setEditingBrgyId(null);
+    setBrgyNameInput('');
+    setShowBrgyModal(true);
+  };
+
+  const openEditBarangayModal = (id: string, currentName: string) => {
+    setEditingBrgyId(id);
+    setBrgyNameInput(currentName);
+    setShowBrgyModal(true);
+  };
+
+  const handleSaveBarangaySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!brgyNameInput.trim()) return toast.error("Please enter a valid Barangay name");
+
+    setIsSavingBrgy(true);
+    try {
+      if (editingBrgyId) {
+        // Update Pipeline
+        const { error } = await api.supabase
+          .from('barangays')
+          .update({ name: brgyNameInput.trim() })
+          .eq('id', editingBrgyId);
+        
+        if (error) throw error;
+        toast.success("Barangay updated successfully.");
+      } else {
+        // Insertion Pipeline
+        const { error } = await api.supabase
+          .from('barangays')
+          .insert([{ name: brgyNameInput.trim() }]);
+        
+        if (error) throw error;
+        toast.success("New Barangay added successfully.");
+      }
+      setShowBrgyModal(false);
+      await handleRefreshData(); // Re-trigger parallel state query handshakes
+    } catch (err: any) {
+      toast.error(`Database Operation Failed: ${err.message}`);
+    } finally {
+      setIsSavingBrgy(false);
+    }
+  };
+
+  const handleDeleteBarangayClick = async (id: string) => {
+    if (!confirm("Are you sure you want to remove this Barangay row? This can affect historical data relations.")) return;
+    try {
+      const { error } = await api.supabase
+        .from('barangays')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      toast.success("Barangay deleted.");
+      await handleRefreshData();
+    } catch (err: any) {
+      toast.error(`Deletion failed: ${err.message}`);
+    }
+  };
+
   const SidebarItem = ({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) => (
     <button
       onClick={onClick}
@@ -92,22 +160,21 @@ export function AdminApp() {
       <span className="text-sm">{label}</span>
     </button>
   );
-  
 
   const Sidebar = () => (
     <div className="fixed left-0 top-16 bottom-0 w-64 bg-[#09637E] border-r border-[#09637E]/20 flex flex-col p-4 z-30 overflow-y-auto">
       <div className="space-y-1">
         <SidebarItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
         <SidebarItem icon={<FileText size={18} />} label="Documents" active={view === 'docs' || view === 'docs-detail'} onClick={() => setView('docs')} />
-        <SidebarItem icon={<History size={18} />} label="Blockchain" active={view === 'tx' || view === 'tx-detail'} onClick={() => setView('tx')} />
-        <SidebarItem icon={<Users size={18} />} label="Barangays" active={view === 'barangay'} onClick={() => setView('barangay')} />
-        <SidebarItem icon={<ShieldCheck size={18} />} label="Audit Logs" active={view === 'audit' || view === 'audit-proof'} onClick={() => setView('audit')} />
+        <SidebarItem icon={<History size={18} />} label="Blockchain Ledger" active={view === 'tx' || view === 'tx-detail'} onClick={() => setView('tx')} />
+        <SidebarItem icon={<Users size={18} />} label="Barangays Dictionary" active={view === 'barangay'} onClick={() => setView('barangay')} />
+        <SidebarItem icon={<ShieldCheck size={18} />} label="Audit Trails Logs" active={view === 'audit' || view === 'audit-proof'} onClick={() => setView('audit')} />
         <SidebarItem icon={<FileText size={18} />} label="Project Records" active={view === 'projects' || view === 'project-detail'} onClick={() => setView('projects')} />
       </div>
 
       <div className="mt-auto space-y-3">
         <div className="p-4 rounded-2xl bg-white/10 border border-white/20">
-          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-2">Network</p>
+          <p className="text-[10px] text-white/70 uppercase tracking-widest font-bold mb-2">Network Connected</p>
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs text-white font-medium">Polygon Amoy</span>
@@ -130,16 +197,12 @@ export function AdminApp() {
         </div>
         <div>
           <span className="font-bold text-white tracking-tight text-lg">LegiChain</span>
-          <span className="ml-2 text-xs font-bold text-white/50 uppercase tracking-wider">Admin</span>
+          <span className="ml-2 text-xs font-bold text-white/50 uppercase tracking-wider">Admin Portal</span>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
-        <ConnectButton
-          chainStatus="icon"
-          accountStatus="avatar"
-          showBalance={false}
-        />
+        <ConnectButton chainStatus="icon" accountStatus="avatar" showBalance={false} />
         <Link
           to="/"
           className="px-4 py-1.5 rounded-full bg-white/10 text-white text-xs font-bold hover:bg-white/20 transition-all border border-white/20 cursor-pointer"
@@ -148,7 +211,7 @@ export function AdminApp() {
         </Link>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/80 text-white text-xs font-bold hover:bg-red-500 transition-all cursor-pointer"
+          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/80 text-white text-xs font-bold hover:bg-red-50 transition-all cursor-pointer"
         >
           <LogOut className="w-3.5 h-3.5" />
           Sign Out
@@ -173,7 +236,7 @@ export function AdminApp() {
       <Navbar />
       <Sidebar />
 
-      {/* Modals */}
+      {/* Forms/Records Modification Modals */}
       <ProjectFormModal
         isOpen={showProjectForm}
         onClose={() => { setShowProjectForm(false); setEditingProject(null); }}
@@ -186,6 +249,53 @@ export function AdminApp() {
         onSave={editingDoc ? handleUpdateDocument : handleCreateDocument}
         editDoc={editingDoc}
       />
+
+      {/* INTERACTIVE POPUP MODAL FOR ADDING/EDITING BARANGAYS */}
+      {showBrgyModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-[#09637E]/10 shadow-xl space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#1C1C1C]">
+                {editingBrgyId ? 'Modify Barangay Location' : 'Register New Barangay'}
+              </h3>
+              <button onClick={() => setShowBrgyModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveBarangaySubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Barangay Name</label>
+                <input 
+                  type="text" 
+                  value={brgyNameInput}
+                  onChange={(e) => setBrgyNameInput(e.target.value)}
+                  placeholder="e.g. Poblacion 1"
+                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-[#088395]"
+                  required
+                  disabled={isSavingBrgy}
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setShowBrgyModal(false)}
+                  className="px-4 py-2 bg-gray-100 rounded-xl text-xs font-bold text-gray-500 hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSavingBrgy}
+                  className="px-5 py-2 bg-[#088395] text-white text-xs font-bold rounded-xl hover:bg-[#09637E] inline-flex items-center gap-1.5"
+                >
+                  {isSavingBrgy && <Loader2 size={12} className="animate-spin" />}
+                  Save Location Row
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <main className="pt-16 pl-64">
         <div className="p-6 md:p-10 max-w-7xl mx-auto">
@@ -267,8 +377,8 @@ export function AdminApp() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                  <div className="bg-white p-8 rounded-3xl border border-[#09637E]/10 shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                  <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-[#09637E]/10 shadow-sm">
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h3 className="font-bold text-[#1C1C1C] flex items-center gap-2">
@@ -294,7 +404,9 @@ export function AdminApp() {
                     </div>
                   </div>
 
-                  <Web3StatusChecker />
+                  <div className="lg:col-span-2">
+                    <Web3StatusChecker />
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -306,7 +418,7 @@ export function AdminApp() {
                   barangays={barangays}
                   selectedBarangayId={selectedBarangayId}
                   documents={dbDocuments}
-                  loading={loadingDocuments}
+                  loading={loadingBlockchain}
                   onViewDetails={(doc) => { setSelectedDocument(doc); setView('docs-detail'); }}
                   onAddDocument={() => { setEditingDoc(null); setShowDocForm(true); }}
                   onEditDocument={(doc) => { setEditingDoc(doc); setShowDocForm(true); }}
@@ -363,57 +475,48 @@ export function AdminApp() {
               </motion.div>
             )}
 
-            {/* ── Barangays ── */}
+            {/* ── Barangays (FIXED: UI hooks re-mapped to direct modal triggers) ── */}
             {view === 'barangay' && (
               <motion.div key="barangay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                   <div>
                     <h1 className="text-2xl font-bold text-[#1C1C1C] tracking-tight">Barangay Management</h1>
                     <p className="text-sm text-gray-500 font-medium flex items-center gap-2 mt-1">
-                      Manage the five participating local units
-                      {!loadingBarangays && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-700 text-[10px] font-bold">
-                          <Database className="w-3 h-3" /> Live Database
-                        </span>
-                      )}
-                      {loadingBarangays && <Loader2 className="w-4 h-4 animate-spin text-[#088395]" />}
+                      Manage active participating local units
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-700 text-[10px] font-bold">
+                        <Database className="w-3 h-3" /> Live Database
+                      </span>
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <button onClick={handleRefreshData} className="flex items-center gap-2 px-4 py-2 bg-[#EBF4F6] border border-[#09637E]/20 text-[#09637E] text-xs font-bold rounded-xl hover:bg-[#09637E] hover:text-white transition-all">
                       <RefreshCw className="w-4 h-4" /> Refresh
                     </button>
-                    <button onClick={handleAddBarangay} className="px-6 py-3 bg-[#088395] text-white font-bold rounded-2xl flex items-center shadow-md hover:bg-[#09637E] transition-colors cursor-pointer">
+                    <button onClick={openAddBarangayModal} className="px-6 py-3 bg-[#088395] text-white font-bold rounded-2xl flex items-center shadow-md hover:bg-[#09637E] transition-colors cursor-pointer">
                       <Plus className="mr-2 w-5 h-5" /> Add Barangay
                     </button>
                   </div>
                 </div>
-                {loadingBarangays ? (
-                  <div className="flex items-center justify-center py-16 gap-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-[#088395]" />
-                    <span className="text-gray-500 font-bold">Loading barangays from database...</span>
-                  </div>
-                ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {barangays.map(b => (
-                      <div key={b.id} className="bg-white p-6 rounded-3xl border border-[#09637E]/10 shadow-sm flex justify-between items-center group hover:border-[#088395]/30 hover:shadow-md transition-all">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-2xl bg-[#EBF4F6] flex items-center justify-center">
-                            <span className="text-xl font-black text-[#09637E]">{b.name.split(' ')[1] || b.id}</span>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-[#1C1C1C]">{b.name}</h4>
-                            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mt-0.5">GMA, Cavite · ID: {b.id}</p>
-                          </div>
+                
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {barangays.map(b => (
+                    <div key={b.id} className="bg-white p-6 rounded-3xl border border-[#09637E]/10 shadow-sm flex justify-between items-center group hover:border-[#088395]/30 hover:shadow-md transition-all">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl bg-[#EBF4F6] flex items-center justify-center">
+                          <span className="text-sm font-black text-[#09637E]">{b.name.charAt(0) || b.id}</span>
                         </div>
-                        <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleEditBarangay(b.id)} className="p-2 hover:bg-[#EBF4F6] rounded-lg text-[#088395] cursor-pointer" title="Edit"><Edit2 size={16} /></button>
-                          <button onClick={() => handleDeleteBarangay(b.id)} className="p-2 hover:bg-red-50 rounded-lg text-red-400 cursor-pointer" title="Delete"><Trash2 size={16} /></button>
+                        <div>
+                          <h4 className="font-bold text-[#1C1C1C]">{b.name}</h4>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold mt-0.5">GMA, Cavite · ID: {b.id}</p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditBarangayModal(b.id, b.name)} className="p-2 hover:bg-[#EBF4F6] rounded-lg text-[#088395] cursor-pointer" title="Edit"><Edit2 size={16} /></button>
+                        <button onClick={() => handleDeleteBarangayClick(b.id)} className="p-2 hover:bg-red-50 rounded-lg text-red-400 cursor-pointer" title="Delete"><Trash2 size={16} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </motion.div>
             )}
 
@@ -421,8 +524,8 @@ export function AdminApp() {
             {view === 'audit' && (
               <motion.div key="audit" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <AuditLogsPage
-                  logs={auditLogs}
-                  loading={loadingAuditLogs}
+                  auditLogs={auditLogs}
+                  loading={loadingBlockchain}
                   onViewProof={(log) => { setSelectedAuditLog(log); setView('audit-proof'); }}
                 />
               </motion.div>
