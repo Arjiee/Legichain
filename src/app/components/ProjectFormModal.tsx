@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Loader2, Database, ShieldCheck } from 'lucide-react';
+import { X, Save, Loader2, Database } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BarangayProject, ProjectCategory, ProjectStatus, FundingSource } from '../utils/projectData';
+import { useData } from './DataContext';
 
 interface ProjectFormModalProps {
   isOpen: boolean;
@@ -26,8 +27,6 @@ const FUNDING_SOURCES: FundingSource[] = [
   'NGO',
   'Mixed Funding',
 ];
-
-const BARANGAYS = ['Poblacion 1', 'Poblacion 2', 'Poblacion 3', 'Poblacion 4', 'Poblacion 5'];
 
 const generateId = () => Date.now().toString();
 const generateProjectId = () => `PROJ-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100).padStart(3, '0')}`;
@@ -56,7 +55,6 @@ const BLANK_PROJECT: BarangayProject = {
     proofOfExpenditure: [],
     lastUpdated: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
   },
-  // CHANGED: Start with false so the context can handle the real sealing process
   blockchainVerified: false, 
   txHash: '',
   block: '',
@@ -70,23 +68,32 @@ const BLANK_PROJECT: BarangayProject = {
 };
 
 export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: ProjectFormModalProps) {
+  const { barangays = [] } = useData(); 
   const [form, setForm] = useState<BarangayProject>(BLANK_PROJECT);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (editProject) {
-      setForm(editProject);
+      setForm({
+        ...editProject,
+        // Safeguard nested financials elements if pulling a partial database row
+        financials: {
+          ...BLANK_PROJECT.financials,
+          ...(editProject.financials || {})
+        }
+      });
     } else {
-      // REMOVED: Mock txHash/block generation. Real data comes from Polygon Amoy
+      const initialBarangay = barangays.length > 0 ? barangays[0].name : 'Poblacion 1';
       setForm({ 
         ...BLANK_PROJECT, 
+        barangay: initialBarangay,
         id: generateId(), 
         projectId: generateProjectId() 
       });
     }
     setError('');
-  }, [editProject, isOpen]);
+  }, [editProject, isOpen, barangays]);
 
   const update = (field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -124,11 +131,36 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
     try {
       setSaving(true);
       setError('');
-      // This will trigger the IPFS upload and Polygon minting in the DataContext
-      await onSave(form); 
+
+      // FIXED: Strict payload sanitization mapping to make database insertions rock solid
+      const sanitizedPayload: BarangayProject = {
+        ...form,
+        projectTitle: form.projectTitle.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        implementingOffice: form.implementingOffice.trim(),
+        beneficiaries: form.beneficiaries ? form.beneficiaries.trim() : '',
+        totalBeneficiaries: Number(form.totalBeneficiaries) || 0,
+        startDate: form.startDate || new Date().toISOString().split('T')[0],
+        expectedCompletionDate: form.expectedCompletionDate || new Date().toISOString().split('T')[0],
+        datePublished: form.datePublished || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        financials: {
+          totalApprovedBudget: Number(form.financials.totalApprovedBudget) || 0,
+          fundingSource: form.financials.fundingSource || 'Barangay Fund',
+          amountReleased: Number(form.financials.amountReleased) || 0,
+          amountUtilized: Number(form.financials.amountUtilized) || 0,
+          remainingBalance: Number(form.financials.remainingBalance) || 0,
+          utilizationStatus: form.financials.utilizationStatus || 'Not Started',
+          proofOfExpenditure: Array.isArray(form.financials.proofOfExpenditure) ? form.financials.proofOfExpenditure : [],
+          lastUpdated: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        }
+      };
+
+      await onSave(sanitizedPayload); 
       onClose();
     } catch (e: any) {
-      setError(e.message || 'Blockchain sealing failed. Please check your wallet.');
+      console.error("Project submission breakdown intercept:", e);
+      setError(e.message || 'Blockchain sealing failed. Please check your network or wallet pipeline.');
     } finally {
       setSaving(false);
     }
@@ -145,29 +177,31 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
             onClick={onClose}
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
           />
+
           <motion.div
-            initial={{ opacity: 0, scale: 0.92, y: 20 }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            className="relative w-full max-w-3xl bg-white rounded-[32px] shadow-2xl border-2 border-[#088395] max-h-[90vh] flex flex-col"
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="relative w-full max-w-3xl bg-white rounded-[32px] shadow-2xl border-2 border-[#088395] max-h-[85vh] flex flex-col overflow-hidden z-10"
           >
-            {/* Modal Header */}
-            <div className="p-8 border-b border-gray-100 bg-[#EBF4F6] rounded-t-[32px] flex justify-between items-center flex-shrink-0">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 bg-[#EBF4F6] flex justify-between items-center flex-shrink-0">
               <div>
-                <h2 className="text-2xl font-black text-[#1C1C1C]">
+                <h2 className="text-xl font-black text-[#1C1C1C]">
                   {editProject ? 'Edit Project' : 'Add New Project'}
                 </h2>
                 <p className="text-xs text-[#088395] font-black uppercase tracking-widest mt-1 flex items-center gap-2">
                   <Database size={12} /> Sealing to Polygon Blockchain
                 </p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors">
-                <X size={24} />
+              <button type="button" onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors cursor-pointer text-gray-500">
+                <X size={20} />
               </button>
             </div>
 
-            {/* Modal Body - Preserving all original inputs */}
-            <div className="p-8 overflow-y-auto space-y-8 flex-1">
+            {/* Scrollable Form Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
               {error && (
                 <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-sm font-bold">
                   {error}
@@ -175,187 +209,189 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
               )}
 
               {/* Basic Info */}
-              <section>
-                <h3 className="text-sm font-black text-[#09637E] uppercase tracking-widest mb-4">Basic Information</h3>
+              <section className="space-y-4">
+                <h3 className="text-xs font-black text-[#09637E] uppercase tracking-widest">Basic Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Project Title *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Project Title *</label>
                     <input
                       value={form.projectTitle}
                       onChange={e => update('projectTitle', e.target.value)}
                       placeholder="e.g. Installation of Solar Streetlights"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Barangay *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Barangay Jurisdiction *</label>
                     <select
                       value={form.barangay}
                       onChange={e => update('barangay', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     >
-                      {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                      {barangays.map(b => (
+                        <option key={b.id} value={b.name}>{b.name}</option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Category *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Category *</label>
                     <select
                       value={form.category}
                       onChange={e => update('category', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     >
                       {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Status *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Status *</label>
                     <select
                       value={form.projectStatus}
                       onChange={e => update('projectStatus', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     >
                       {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Implementing Office *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Implementing Office *</label>
                     <input
                       value={form.implementingOffice}
                       onChange={e => update('implementingOffice', e.target.value)}
                       placeholder="e.g. Barangay Engineering Office"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-medium"
                     />
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Description *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Description *</label>
                     <textarea
                       value={form.description}
                       onChange={e => update('description', e.target.value)}
                       rows={3}
                       placeholder="Brief description of the project..."
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none resize-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none resize-none text-gray-600 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Location *</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Location *</label>
                     <input
                       value={form.location}
                       onChange={e => update('location', e.target.value)}
                       placeholder="e.g. Main Road, Poblacion 1"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Beneficiaries</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Beneficiaries</label>
                     <input
                       value={form.beneficiaries}
                       onChange={e => update('beneficiaries', e.target.value)}
                       placeholder="e.g. All residents of Poblacion 1"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Total Beneficiaries</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Total Beneficiaries</label>
                     <input
                       type="number"
                       value={form.totalBeneficiaries || 0}
                       onChange={e => update('totalBeneficiaries', Number(e.target.value))}
                       min={0}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                 </div>
               </section>
 
-              {/* Dates */}
-              <section>
-                <h3 className="text-sm font-black text-[#09637E] uppercase tracking-widest mb-4">Timeline</h3>
+              {/* Timeline */}
+              <section className="space-y-4">
+                <h3 className="text-xs font-black text-[#09637E] uppercase tracking-widest">Timeline</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Start Date</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Start Date</label>
                     <input
                       type="date"
                       value={form.startDate}
                       onChange={e => update('startDate', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Expected Completion</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Expected Completion</label>
                     <input
                       type="date"
                       value={form.expectedCompletionDate}
                       onChange={e => update('expectedCompletionDate', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Actual Completion</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Actual Completion</label>
                     <input
                       type="date"
                       value={form.actualCompletionDate || ''}
                       onChange={e => update('actualCompletionDate', e.target.value || undefined)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                 </div>
               </section>
 
               {/* Financials */}
-              <section>
-                <h3 className="text-sm font-black text-[#09637E] uppercase tracking-widest mb-4">Financial Information</h3>
+              <section className="space-y-4">
+                <h3 className="text-xs font-black text-[#09637E] uppercase tracking-widest">Financial Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Total Approved Budget (₱)</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Total Approved Budget (₱)</label>
                     <input
                       type="number"
                       value={form.financials.totalApprovedBudget}
                       onChange={e => updateFinancials('totalApprovedBudget', e.target.value)}
                       min={0}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none font-bold text-[#088395]"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none font-bold text-[#088395]"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Funding Source</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Funding Source</label>
                     <select
                       value={form.financials.fundingSource}
                       onChange={e => updateFinancials('fundingSource', e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     >
                       {FUNDING_SOURCES.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Amount Released (₱)</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Amount Released (₱)</label>
                     <input
                       type="number"
                       value={form.financials.amountReleased}
                       onChange={e => updateFinancials('amountReleased', e.target.value)}
                       min={0}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Amount Utilized (₱)</label>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Amount Utilized (₱)</label>
                     <input
                       type="number"
                       value={form.financials.amountUtilized}
                       onChange={e => updateFinancials('amountUtilized', e.target.value)}
                       min={0}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none"
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#088395] focus:outline-none text-gray-700 font-bold"
                     />
                   </div>
                 </div>
 
-                <div className="mt-4 p-4 bg-[#EBF4F6] rounded-2xl border border-[#09637E]/10">
+                <div className="p-4 bg-[#EBF4F6] rounded-2xl border border-[#09637E]/10">
                   <div className="flex justify-between text-sm font-bold text-[#09637E]">
                     <span>Remaining Balance:</span>
                     <span>₱{form.financials.remainingBalance.toLocaleString()}</span>
@@ -368,24 +404,26 @@ export function ProjectFormModal({ isOpen, onClose, onSave, editProject }: Proje
               </section>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-8 bg-gray-50 border-t border-gray-100 rounded-b-[32px] flex justify-end gap-4 flex-shrink-0">
+            {/* Actions Footer */}
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 flex-shrink-0">
               <button
+                type="button"
                 onClick={onClose}
                 disabled={saving}
-                className="px-8 py-3 bg-white border-2 border-gray-200 text-gray-700 font-bold rounded-2xl hover:bg-gray-50 transition-all"
+                className="px-6 py-2.5 bg-white border-2 border-gray-200 text-gray-700 font-bold rounded-xl hover:bg-gray-50 transition-all cursor-pointer text-xs"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="px-8 py-3 bg-[#088395] text-white font-black rounded-2xl hover:bg-[#09637E] transition-all shadow-md flex items-center gap-2 disabled:opacity-60"
+                className="px-6 py-2.5 bg-[#088395] text-white font-black rounded-xl hover:bg-[#09637E] transition-all shadow-md flex items-center gap-2 disabled:opacity-60 cursor-pointer text-xs"
               >
                 {saving ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Sealing to Blockchain...</>
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Sealing to Blockchain...</>
                 ) : (
-                  <><Save className="w-4 h-4" /> {editProject ? 'Save Changes' : 'Seal & Record Project'}</>
+                  <><Save className="w-3.5 h-3.5" /> {editProject ? 'Save Changes' : 'Seal & Record Project'}</>
                 )}
               </button>
             </div>

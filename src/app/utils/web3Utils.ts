@@ -1,12 +1,12 @@
 /**
  * Web3 Utility Functions
  * Optimized for Gas Efficiency: Fat data stays on IPFS, Lean pointers go to Blockchain.
- * Enhanced to capture Confirmation Blocks and override Amoy Gas Floors.
+ * Rigid BigInt Gas Override Configurations to bypass wallet-driven downscaling on Amoy.
  */
 
 import { PINATA_CONFIG, wagmiConfig } from '../config/web3Config';
 import { writeContract, waitForTransactionReceipt } from 'wagmi/actions';
-import { parseAbi, parseGwei } from 'viem';
+import { parseAbi } from 'viem';
 import { Document } from './documentData';
 import { BarangayProject } from './projectData';
 
@@ -111,7 +111,7 @@ export async function uploadProjectToIPFS(
 }
 
 /**
- * Mint NFT on Polygon Amoy - GAS OPTIMIZED & CAPTURES HASH IMMEDIATELY
+ * Mint NFT on Polygon Amoy - RIGID BIGINT GAS OVERRIDES
  */
 export async function mintNFTOnPolygon(
   title: string,
@@ -123,8 +123,8 @@ export async function mintNFTOnPolygon(
     throw new Error('Contract address not configured');
   }
 
-  // 1. Fire wallet signature request. The resolved promise exposes the txHash immediately.
-  const txHash = await writeContract(wagmiConfig as any, {
+  // FIXED: Explicit BigInt notation forces absolute gas ceilings to clear the 25 Gwei Amoy RPC floor
+  const hash = await writeContract(wagmiConfig as any, {
     address: contractAddress,
     abi: LEGICHAIN_ABI,
     functionName: 'mintDocument',
@@ -134,18 +134,17 @@ export async function mintNFTOnPolygon(
       metadataUri, 
       barangay
     ],
-    maxPriorityFeePerGas: parseGwei('30'), 
-    maxFeePerGas: parseGwei('35'),
+    // Force 45 Gwei tip cap (45,000,000,000 Wei) and 75 Gwei max fee structure parameters
+    maxPriorityFeePerGas: 45000000000n, 
+    maxFeePerGas: 75000000000n,
   });
 
-  // Log captured hash to runtime console before mining confirmation finishes
-  console.log("🚀 Web3 Layer Captured Transaction Hash directly from signature:", txHash);
+  console.log("🚀 Web3 Layer Captured Transaction Hash directly from signature:", hash);
 
-  // 2. Await full block processing on-chain
-  const receipt = await waitForTransactionReceipt(wagmiConfig as any, { hash: txHash });
+  const receipt = await waitForTransactionReceipt(wagmiConfig as any, { hash });
   
   return { 
-    txHash: txHash, // Use immediately captured signature hash reference
+    txHash: hash, 
     blockNumber: receipt.blockNumber.toString() 
   };
 }
@@ -185,7 +184,6 @@ export async function uploadDocumentDataToIPFS(
 
 /**
  * Orchestrates the full flow: Asset -> Metadata -> Blockchain
- * Emits the metadataCID as documentHash for context consistency.
  */
 export async function completeWeb3Upload(
   documentData: Partial<Document>,
@@ -212,7 +210,7 @@ export async function completeWeb3Upload(
   return { 
     imagesHash, 
     documentHash, 
-    metadataCID: documentHash, // Aliased to match contract reader hooks
+    metadataCID: documentHash, 
     txHash, 
     blockNumber 
   };

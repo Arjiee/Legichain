@@ -9,7 +9,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ─── PRODUCTION BARANGAY METADATA LOOKUP ────────────────────────────────────
+// ─── ACTIVE BARANGAY METADATA LOOKUP ────────────────────────────────────────
 
 export async function fetchBarangays(): Promise<Array<{ id: string; name: string }>> {
   try {
@@ -39,7 +39,7 @@ export async function fetchBarangays(): Promise<Array<{ id: string; name: string
   }
 }
 
-// ─── CENTRAL SYSTEM AUDIT CHRONOLOGICAL MAPPINGS ─────────────────────────────
+// ─── SYSTEM AUDIT TRAIL LOGS REDUCERS ───────────────────────────────────────
 
 export async function fetchAuditLogs(): Promise<ProjectAuditLog[]> {
   try {
@@ -48,7 +48,7 @@ export async function fetchAuditLogs(): Promise<ProjectAuditLog[]> {
       .select('*');
 
     if (error) {
-      console.error("❌ Supabase table log collection failed:", error.message);
+      console.error("❌ Supabase raw table query fetch block failed:", error.message);
       return [];
     }
     if (!data) return [];
@@ -71,6 +71,7 @@ export async function fetchAuditLogs(): Promise<ProjectAuditLog[]> {
       createdAt: row.created_at
     }));
   } catch (err) {
+    console.error("Critical connection failure inside audit log parser:", err);
     return [];
   }
 }
@@ -101,11 +102,12 @@ export async function createAuditLog(log: Partial<ProjectAuditLog>): Promise<any
     if (error) throw error;
     return data?.[0];
   } catch (err: any) {
+    console.error("Failed to append systemic audit record:", err.message);
     return null;
   }
 }
 
-// ─── MASTER RECORD DOCUMENTS PIPELINES (FIXED CASED RESOLUTION MAPPING) ──────
+// ─── ADMINISTRATIVE LAW DOCUMENTS PIPELINES ────────────────────────────────
 
 export async function fetchDocuments(): Promise<Document[]> {
   try {
@@ -115,7 +117,6 @@ export async function fetchDocuments(): Promise<Document[]> {
     if (error) throw error;
     if (!data) return [];
 
-    // FIXED: Maps relational snake_case database outputs directly into front-end keys
     return data.map((doc: any) => ({
       ...doc,
       txHash: doc.tx_hash || doc.txHash || '0x...',
@@ -123,24 +124,57 @@ export async function fetchDocuments(): Promise<Document[]> {
       attachedFiles: doc.attached_files || doc.attachedFiles || []
     }));
   } catch (err) {
-    console.error("Critical documents fetch error layout:", err);
+    console.error("Critical document registry parser exception:", err);
     return [];
   }
 }
 
 export async function createDocument(doc: Document): Promise<Document> {
+  // FIXED: Explicit snake_case mappings to prevent table payload rejection drops
+  const databaseRow = {
+    id: doc.id || Date.now().toString(),
+    document_id: doc.documentId || doc.id || '',
+    title: doc.title || '',
+    type: doc.type || 'Ordinance',
+    barangay: doc.barangay || '',
+    status: doc.status || 'Draft',
+    description: doc.description || '',
+    publisher: doc.publisher || '',
+    tags: Array.isArray(doc.tags) ? doc.tags : [],
+    attached_files: Array.isArray(doc.attachedFiles) ? doc.attachedFiles : (Array.isArray((doc as any).attached_files) ? (doc as any).attached_files : []),
+    tx_hash: doc.txHash || '',
+    blockchain_status: doc.blockchainStatus || 'Local',
+    block: doc.block || ''
+  };
+  
   const { data, error } = await supabase
     .from('documents')
-    .insert([doc])
+    .insert([databaseRow])
     .select();
-  if (error) throw error;
-  return data[0];
+    
+  if (error) {
+    console.error("Supabase Document Insertion Error Details:", error.message);
+    throw error;
+  }
+  
+  return {
+    ...data[0],
+    txHash: data[0].tx_hash || '0x...',
+    blockchainStatus: data[0].blockchain_status || 'Local',
+    attachedFiles: data[0].attached_files || []
+  };
 }
 
 export async function updateDocument(id: string | number, doc: any): Promise<Document> {
+  // Translate dynamically on structural patch variations safely
+  const databaseRow: any = { ...doc };
+  if ('txHash' in doc) databaseRow.tx_hash = doc.txHash;
+  if ('blockchainStatus' in doc) databaseRow.blockchain_status = doc.blockchainStatus;
+  if ('attachedFiles' in doc) databaseRow.attached_files = doc.attachedFiles;
+
   const { data, error } = await supabase
     .from('documents')
-    .update(doc)
+    .update(databaseRow)
     .eq('id', id)
     .select();
   if (error) throw error;
@@ -155,7 +189,7 @@ export async function deleteDocument(id: string | number): Promise<void> {
   if (error) throw error;
 }
 
-// ─── STORAGE PROCESSOR ──────────────────────────────────────────────────────
+// ─── SECURE STORAGE ASSET UPLOADS ──────────────────────────────────────────
 
 export async function uploadDocumentImage(file: File): Promise<string> {
   const fileExt = file.name.split('.').pop();
@@ -177,33 +211,109 @@ export async function uploadDocumentImage(file: File): Promise<string> {
   return data.publicUrl;
 }
 
-// ─── DEVELOPMENT PROJECTS SECTIONS ──────────────────────────────────────────
+// ─── REGIONAL REFORMS DEVELOPMENT PROJECTS SECTIONS ─────────────────────────
 
 export async function fetchProjects(): Promise<BarangayProject[]> {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('*');
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*');
+      
+    if (error) throw error;
+    if (!data) return [];
+
+    return data.map((row: any) => ({
+      id: row.id,
+      projectId: row.project_id || row.projectId || '',
+      projectTitle: row.project_title || row.projectTitle || '',
+      barangay: row.barangay || '',
+      category: row.category || '',
+      description: row.description || '',
+      location: row.location || '',
+      startDate: row.start_date || row.startDate || '',
+      expectedCompletionDate: row.expected_completion_date || row.expectedCompletionDate || '',
+      projectStatus: row.project_status || row.projectStatus || 'Planned',
+      implementingOffice: row.implementing_office || row.implementingOffice || '',
+      beneficiaries: row.beneficiaries || '',
+      totalBeneficiaries: Number(row.total_beneficiaries || row.totalBeneficiaries || 0),
+      financials: row.financials || {},
+      blockchainVerified: row.blockchain_verified || row.blockchainVerified || false,
+      txHash: row.tx_hash || row.txHash || '',
+      block: row.block || '',
+      documentHash: row.document_hash || row.documentHash || '',
+      verificationStatus: row.verification_status || row.verificationStatus || 'Local',
+      datePublished: row.date_published || row.datePublished || ''
+    }));
+  } catch (err) {
+    console.error("Failed to translate relational project parameters:", err);
+    return [];
+  }
 }
 
-export async function createProject(project: BarangayProject): Promise<BarangayProject> {
+export async function createProject(project: any): Promise<any> {
+  const databaseRow = {
+    id: project.id || Date.now().toString(),
+    project_id: project.projectId,
+    project_title: project.projectTitle,
+    barangay: project.barangay,
+    category: project.category,
+    description: project.description,
+    location: project.location,
+    start_date: project.startDate,
+    expected_completion_date: project.expectedCompletionDate,
+    project_status: project.projectStatus,
+    implementing_office: project.implementingOffice,
+    beneficiaries: project.beneficiaries,
+    total_beneficiaries: project.totalBeneficiaries,
+    financials: project.financials,
+    blockchain_verified: project.blockchainVerified,
+    tx_hash: project.txHash,
+    block: project.block,
+    document_hash: project.documentHash,
+    verification_status: project.verificationStatus,
+    date_published: project.datePublished
+  };
+
   const { data, error } = await supabase
     .from('projects')
-    .insert([project])
+    .insert([databaseRow])
     .select();
+
   if (error) throw error;
-  return data[0];
+  return data?.[0];
 }
 
-export async function updateProject(id: string | number, project: Partial<BarangayProject>): Promise<BarangayProject> {
+export async function updateProject(id: string | number, project: any): Promise<any> {
+  const databaseRow = {
+    project_id: project.projectId,
+    project_title: project.projectTitle,
+    barangay: project.barangay,
+    category: project.category,
+    description: project.description,
+    location: project.location,
+    start_date: project.startDate,
+    expected_completion_date: project.expectedCompletionDate,
+    project_status: project.projectStatus,
+    implementing_office: project.implementingOffice,
+    beneficiaries: project.beneficiaries,
+    total_beneficiaries: project.totalBeneficiaries,
+    financials: project.financials,
+    blockchain_verified: project.blockchainVerified,
+    tx_hash: project.txHash,
+    block: project.block,
+    document_hash: project.documentHash,
+    verification_status: project.verificationStatus,
+    date_published: project.datePublished
+  };
+
   const { data, error } = await supabase
     .from('projects')
-    .update(project)
+    .update(databaseRow)
     .eq('id', id)
     .select();
+
   if (error) throw error;
-  return data[0];
+  return data?.[0];
 }
 
 export async function deleteProject(id: string | number): Promise<void> {
@@ -214,7 +324,7 @@ export async function deleteProject(id: string | number): Promise<void> {
   if (error) throw error;
 }
 
-// ─── MISC INDICES TRACES ────────────────────────────────────────────────────
+// ─── BLOCKCHAIN BACKUP EXPLORER CACHING TRAILS ─────────────────────────────
 
 export async function fetchBlockchainTransactions(): Promise<BlockchainTransaction[]> {
   const { data, error } = await supabase
