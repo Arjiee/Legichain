@@ -20,14 +20,20 @@ const LEGICHAIN_ABI = parseAbi([
 /**
  * Upload images/files to IPFS - Costs $0 Gas
  */
-export async function uploadImagesToIPFS(files: File[]): Promise<string> {
+export const uploadImagesToIPFS = async (files: File[]): Promise<string> => {
   if (files.length === 0) return '';
+
   if (!PINATA_CONFIG.apiKey || !PINATA_CONFIG.secretKey) {
     throw new Error('Pinata API keys missing in .env');
   }
 
+  // 1. Create a timeout controller
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 300,000 ms = 5 minutes
+
   try {
     const formData = new FormData();
+
     if (files.length === 1) {
       formData.append('file', files[0]);
     } else {
@@ -37,10 +43,13 @@ export async function uploadImagesToIPFS(files: File[]): Promise<string> {
     }
 
     const metadata = JSON.stringify({
-      name: `LegiChain-Asset-${Date.now()}`,
+      name: files.length === 1 
+        ? `LegiChain-Image-${Date.now()}-${files[0].name}` 
+        : `LegiChain-Images-${Date.now()}`,
     });
     formData.append('pinataMetadata', metadata);
 
+    // 2. Pass the signal to your fetch request
     const response = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
       method: "POST",
       headers: {
@@ -48,16 +57,29 @@ export async function uploadImagesToIPFS(files: File[]): Promise<string> {
         pinata_secret_api_key: PINATA_CONFIG.secretKey,
       },
       body: formData,
+      signal: controller.signal, // <-- Add this line
     });
 
-    if (!response.ok) throw new Error('IPFS Asset Upload Failed');
+    // Clear the timeout if the request succeeds before the 5 minutes are up
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`IPFS Upload Failed: ${errorText}`);
+    }
+
     const result = await response.json();
-    return result.IpfsHash; 
-  } catch (error) {
-    console.error('❌ IPFS upload failed:', error);
+    return result.IpfsHash;
+
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('IPFS upload timed out. The file might be too large or your connection is slow.');
+    }
+    console.error('❌ IPFS image upload failed:', error);
     throw error;
   }
-}
+};
 
 /**
  * Upload Fat Metadata to IPFS - Costs $0 Gas
