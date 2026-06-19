@@ -10,11 +10,11 @@ export interface AuditLog extends ProjectAuditLog {}
 interface AuditLogsPageProps {
   isAdmin?: boolean;
   onViewProof: (log: AuditLog) => void;
-  logs: AuditLog[];
+  auditLogs: AuditLog[];
   loading?: boolean;
 }
 
-export function AuditLogsPage({ onViewProof, logs = [], loading = false }: AuditLogsPageProps) {
+export function AuditLogsPage({ onViewProof, auditLogs = [], loading = false }: AuditLogsPageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [barangayFilter, setBarangayFilter] = useState('all');
   const [moduleFilter, setModuleFilter] = useState('all');
@@ -22,18 +22,18 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
 
-  // 1. Double-lock safety fallback
-  const safeLogs = logs || [];
+  // Safety fallback array guard
+  const safeLogs = auditLogs || [];
 
   const filteredLogs = useMemo(() => {
     return safeLogs.filter(log => {
-      // 2. Null-safe property access to prevent Crashes
       const action = log.action || '';
       const title = log.projectTitle || '';
       const performer = log.performedBy || '';
       const desc = log.description || '';
       const brgy = log.barangay || '';
       const hash = log.txHash || '';
+      const status = log.blockchainStatus || '';
 
       const matchesSearch = 
         action.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -42,17 +42,21 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
         desc.toLowerCase().includes(searchTerm.toLowerCase()) ||
         hash.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesBarangay = barangayFilter === 'all' || brgy === barangayFilter;
+      const matchesBarangay = barangayFilter === 'all' || brgy.toLowerCase() === barangayFilter.toLowerCase();
       const matchesModule = moduleFilter === 'all' || log.module === moduleFilter;
       const matchesActionType = actionTypeFilter === 'all' || log.actionType === actionTypeFilter;
-      const matchesStatus = statusFilter === 'all' || log.blockchainStatus === statusFilter;
+      
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'Success' && (status === 'Success' || status === 'Verified')) ||
+        status === statusFilter;
+
       const matchesDate = !dateFilter || (log.timestamp && log.timestamp.includes(dateFilter));
 
       return matchesSearch && matchesBarangay && matchesModule && matchesActionType && matchesStatus && matchesDate;
     });
   }, [safeLogs, searchTerm, barangayFilter, moduleFilter, actionTypeFilter, statusFilter, dateFilter]);
 
-  // Dynamic Statistics from local state
+  // Dynamic system tracking stats
   const stats = useMemo(() => ({
     total: safeLogs.length,
     verified: safeLogs.filter(l => l.blockchainStatus === 'Success' || l.blockchainStatus === 'Verified').length,
@@ -91,7 +95,7 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
         </div>
       </div>
 
-      {/* Stats Panel */}
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard label="Total Operations" value={stats.total} color="bg-[#EBF4F6]" text="text-[#09637E]" />
         <StatCard label="On-Chain Sealed" value={stats.verified} color="bg-emerald-50" text="text-emerald-700" />
@@ -99,7 +103,7 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
         <StatCard label="Doc Registries" value={stats.byModule.Documents} color="bg-purple-50" text="text-purple-700" />
       </div>
 
-      {/* Filter Bar */}
+      {/* Filters Area */}
       <div className="bg-white p-6 rounded-[32px] border-2 border-[#09637E]/5 shadow-sm space-y-4">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={20} />
@@ -112,13 +116,18 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
         </div>
       </div>
 
-      {/* Main Table */}
+      {/* Data Layout Table Container */}
       <div className="bg-white rounded-[40px] border-2 border-[#09637E]/5 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           {loading && safeLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <Loader2 className="w-10 h-10 animate-spin text-[#088395]" />
               <span className="text-[#09637E]/60 font-black text-xs uppercase tracking-[0.2em]">Synchronizing Audit Trail...</span>
+            </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-gray-400">
+              <Database size={32} className="mb-2 text-gray-300" />
+              <span className="text-xs font-bold uppercase tracking-wider">No matching audit entries found</span>
             </div>
           ) : (
             <table className="w-full text-left">
@@ -133,46 +142,51 @@ export function AuditLogsPage({ onViewProof, logs = [], loading = false }: Audit
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-[#EBF4F6]/20 transition-all group">
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2">
-                        <Clock size={12} className="text-gray-300" />
-                        <span className="text-[11px] font-bold text-gray-500">{log.timestamp}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5">
-                      <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${getActionTypeColor(log.actionType)}`}>
-                        {log.actionType}
-                      </span>
-                    </td>
-                    <td className="px-8 py-5 max-w-[300px]">
-                      <p className="text-[11px] font-bold text-[#1C1C1C] truncate">{log.description}</p>
-                      <p className="text-[9px] font-medium text-[#088395] mt-1 uppercase tracking-widest">{log.barangay}</p>
-                    </td>
-                    <td className="px-8 py-5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
-                          <User size={12} />
+                {filteredLogs.map((log) => {
+                  const isSuccess = log.blockchainStatus === 'Success' || log.blockchainStatus === 'Verified';
+                  return (
+                    <tr key={log.id} className="hover:bg-[#EBF4F6]/20 transition-all group">
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-2">
+                          <Clock size={12} className="text-gray-300" />
+                          <span className="text-[11px] font-bold text-gray-500">{log.timestamp}</span>
                         </div>
-                        <span className="text-[11px] font-bold text-gray-700">{log.performedBy}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-center">
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full border-2 ${
-                        log.blockchainStatus === 'Success' ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'
-                      }`}>
-                        <ShieldCheck size={10} className="mr-1.5" />
-                        <span className="text-[8px] font-black uppercase tracking-tight">{log.blockchainStatus}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                      <button onClick={() => onViewProof(log)} className="p-2 hover:bg-[#EBF4F6] rounded-xl text-[#088395] transition-all">
-                        <ChevronRight size={20} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-8 py-5">
+                        <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border ${getActionTypeColor(log.actionType)}`}>
+                          {log.actionType}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 max-w-[300px]">
+                        <p className="text-[11px] font-bold text-[#1C1C1C] truncate">{log.description}</p>
+                        <p className="text-[9px] font-medium text-[#088395] mt-1 uppercase tracking-widest">{log.barangay}</p>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-gray-400">
+                            <User size={12} />
+                          </div>
+                          <span className="text-[11px] font-bold text-gray-700">{log.performedBy}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-center">
+                        <div className={`inline-flex items-center px-3 py-1 rounded-full border-2 ${
+                          isSuccess ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'
+                        }`}>
+                          <ShieldCheck size={10} className="mr-1.5" />
+                          <span className="text-[8px] font-black uppercase tracking-tight">
+                            {isSuccess ? 'Verified' : log.blockchainStatus}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        <button onClick={() => onViewProof(log)} className="p-2 hover:bg-[#EBF4F6] rounded-xl text-[#088395] transition-all">
+                          <ChevronRight size={20} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

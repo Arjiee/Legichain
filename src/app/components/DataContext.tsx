@@ -87,11 +87,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const syncEverything = async () => {
     try {
       setLoadingBlockchain(true);
-      const [blockchainDocs, supabaseDocs, supabaseProjects] = await Promise.all([
+      
+      // Pull all data sources in parallel, including the master audit tables
+      const [blockchainDocs, supabaseDocs, supabaseProjects, supabaseLogs] = await Promise.all([
         getAllBlockchainDocumentsWithMetadata(),
         api.fetchDocuments(),
-        api.fetchProjects()
+        api.fetchProjects(),
+        api.fetchAuditLogs()
       ]);
+
+      // Map operational audit trails to local state instantly
+      if (supabaseLogs) {
+        setAuditLogs(supabaseLogs);
+      }
 
       // --- 1. DEDUPLICATE & SORT DOCUMENTS (LATEST FIRST) ---
       const docsMap = new Map();
@@ -104,11 +112,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const key = bDoc.documentId?.toString() || bDoc.id?.toString();
         const existing = docsMap.get(key);
         
-        // SAFE MERGE: Preserve database values if blockchain metadata is missing
         docsMap.set(key, { 
           ...existing, 
           ...bDoc,
-          // Guard: Don't let a placeholder '0x...' overwrite a real hash in Supabase
           txHash: (existing?.txHash && existing.txHash !== '0x...') ? existing.txHash : bDoc.txHash,
           images: existing?.images || bDoc.images || bDoc.documentImage,
           description: existing?.description || bDoc.description
@@ -116,7 +122,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       
       const sortedDocs = Array.from(docsMap.values()).sort((a, b) => 
-        Number(b.id || 0) - Number(a.id || 0)
+        (b.documentId || b.id || '').toString().localeCompare((a.documentId || a.id || '').toString())
       );
       setDbDocuments(sortedDocs);
 
@@ -139,7 +145,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
       
       const sortedProjects = Array.from(projectsMap.values()).sort((a, b) => 
-        Number(b.id || 0) - Number(a.id || 0)
+        (b.projectId || b.id || '').toString().localeCompare((a.projectId || a.id || '').toString())
       );
       setProjects(sortedProjects);
 
@@ -170,14 +176,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const init = async () => {
-      const [projR, logsR, barR] = await Promise.allSettled([
-        api.fetchProjects(), api.fetchAuditLogs(), api.fetchBarangays(),
-      ]);
-      if (projR.status === 'fulfilled') setProjects(projR.value || []);
-      if (logsR.status === 'fulfilled') setAuditLogs(logsR.value || []);
-      if (barR.status === 'fulfilled') setBarangays(barR.value || INITIAL_BARANGAYS);
-      await syncEverything();
-      setLoadingProjects(false);
+      try {
+        const [projR, logsR, barR] = await Promise.allSettled([
+          api.fetchProjects(), api.fetchAuditLogs(), api.fetchBarangays(),
+        ]);
+        if (projR.status === 'fulfilled') setProjects(projR.value || []);
+        if (logsR.status === 'fulfilled') setAuditLogs(logsR.value || []);
+        if (barR.status === 'fulfilled') setBarangays(barR.value || INITIAL_BARANGAYS);
+        
+        await syncEverything();
+      } catch (err) {
+        console.error("Core initialization exception handling loop:", err);
+      } finally {
+        setLoadingProjects(false);
+      }
     };
     init();
   }, []);
@@ -194,7 +206,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await api.createProject(project);
       setProjects(prev => [project, ...prev]);
       toast.success("Database record created.");
-    } catch (e) { toast.error("Local save failed."); }
+    } catch (e) { 
+      toast.error("Local save failed."); 
+    }
   };
 
   const handleUpdateProject = async (project: BarangayProject) => {
@@ -202,7 +216,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await api.updateProject(project.id, project);
       setProjects(prev => prev.map(p => p.id === project.id ? project : p));
       toast.success("Record updated.");
-    } catch (e) { toast.error("Update failed."); }
+    } catch (e) { 
+      toast.error("Update failed."); 
+    }
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -210,15 +226,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.deleteProject(projectId);
       setProjects(prev => prev.filter(p => p.id !== projectId));
+      toast.success("Project removed successfully.");
       return true;
-    } catch (e) { return false; }
+    } catch (e) { 
+      toast.error("Failed to delete project row.");
+      return false; 
+    }
   };
 
   // --- DOCUMENT HANDLERS ---
   const handleCreateDocument = async (doc: Document) => {
-    await api.createDocument(doc);
-    setDbDocuments(prev => [doc, ...prev]);
-    toast.success("Document added to local registry.");
+    try {
+      await api.createDocument(doc);
+      setDbDocuments(prev => [doc, ...prev]);
+      toast.success("Document added to local registry.");
+    } catch (e) {
+      toast.error("Failed to commit document registry entry.");
+    }
   };
 
   const handleDeleteDocument = async (docId: string) => {
@@ -271,11 +295,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const verifiedUpdate = { 
         ...project, 
         blockchainVerified: true, 
-        blockchainStatus: 'Verified',
+        blockchainStatus: 'Verified' as const,
         txHash, 
         block: blockNumber, 
         documentHash: metadataHash,
-        verificationStatus: 'Verified on Chain'
+        verificationStatus: 'Verified on Chain' as const
       };
       await api.updateProject(project.id, verifiedUpdate);
 
@@ -293,7 +317,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       toast.loading("Initiating Web3 Protocol...");
 
-      // 1. Orchestrate: Upload Scan -> Upload Metadata -> Mint NFT
       const { imagesHash, documentHash, txHash, blockNumber } = await completeWeb3Upload(
         doc,
         doc.tags || [],
@@ -306,19 +329,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         }
       );
 
-      // 2. Prepare verified update
-      const verifiedUpdate = { 
-        ...doc, 
-        blockchainVerified: true, 
+      const verifiedUpdate: Partial<Document> = { 
+        status: 'Active', 
         blockchainStatus: 'Verified', 
         txHash: txHash,         
         block: blockNumber, 
-        metadataCID: documentHash,
-        images: imagesHash ? `ipfs://${imagesHash}` : (doc as any).images, 
-        verificationStatus: 'Verified on Chain'
+        lastModified: new Date().toISOString()
       };
 
-      // 3. Update Supabase
       await api.updateDocument(doc.id, verifiedUpdate);
       
       toast.dismiss();
