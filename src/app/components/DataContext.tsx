@@ -45,6 +45,7 @@ interface DataContextType {
   handleUpdateProject: (project: BarangayProject) => Promise<void>;
   handleDeleteProject: (projectId: string) => Promise<boolean>;
   handleCreateDocument: (doc: Document) => Promise<void>;
+  handleUpdateDocument: (id: string | number, doc: Partial<Document>) => Promise<void>;
   handleDeleteDocument: (docId: string) => Promise<boolean>;
   handleVerifyDocument: (doc: Document) => Promise<void>;
   handleSealProjectToBlockchain: (project: BarangayProject) => Promise<void>;
@@ -82,13 +83,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }), [projects]);
 
   /**
-   * Sync Engine: Safe merging of Database and Blockchain data
+   * Sync Engine: Safe chronological merging of Database and Blockchain data
    */
   const syncEverything = async () => {
     try {
       setLoadingBlockchain(true);
       
-      // Pull all data sources in parallel, including the master audit tables
       const [blockchainDocs, supabaseDocs, supabaseProjects, supabaseLogs] = await Promise.all([
         getAllBlockchainDocumentsWithMetadata(),
         api.fetchDocuments(),
@@ -96,12 +96,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         api.fetchAuditLogs()
       ]);
 
-      // Map operational audit trails to local state instantly
       if (supabaseLogs) {
-        setAuditLogs(supabaseLogs);
+        const sortedLogs = (supabaseLogs || []).sort((a, b) => {
+          return new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime();
+        });
+        setAuditLogs(sortedLogs);
       }
 
-      // --- 1. DEDUPLICATE & SORT DOCUMENTS (LATEST FIRST) ---
+      // --- 1. DEDUPLICATE & SORT DOCUMENTS (NEWEST FIRST) ---
       const docsMap = new Map();
       (supabaseDocs || []).forEach(doc => {
         const key = doc.documentId?.toString() || doc.id?.toString();
@@ -117,16 +119,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           ...bDoc,
           txHash: (existing?.txHash && existing.txHash !== '0x...') ? existing.txHash : bDoc.txHash,
           images: existing?.images || bDoc.images || bDoc.documentImage,
-          description: existing?.description || bDoc.description
+          description: existing?.description || bDoc.description,
+          created_at: existing?.created_at || new Date(bDoc.datePublished || Date.now()).toISOString()
         });
       });
       
-      const sortedDocs = Array.from(docsMap.values()).sort((a, b) => 
-        (b.documentId || b.id || '').toString().localeCompare((a.documentId || a.id || '').toString())
-      );
+      const sortedDocs = Array.from(docsMap.values()).sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.datePublished || 0).getTime();
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.datePublished || 0).getTime();
+        return timeB - timeA;
+      });
       setDbDocuments(sortedDocs);
 
-      // --- 2. DEDUPLICATE & SORT PROJECTS (LATEST FIRST) ---
+      // --- 2. DEDUPLICATE & SORT PROJECTS (NEWEST FIRST) ---
       const projectsMap = new Map();
       (supabaseProjects || []).forEach(proj => {
         const key = proj.projectId?.toString() || proj.id?.toString();
@@ -140,16 +145,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         projectsMap.set(key, { 
           ...existing, 
           ...bProj,
-          txHash: (existing?.txHash && existing.txHash !== '0x...') ? existing.txHash : bProj.txHash
+          txHash: (existing?.txHash && existing.txHash !== '0x...') ? existing.txHash : bProj.txHash,
+          created_at: existing?.created_at || new Date(bProj.timestamp || Date.now()).toISOString()
         });
       });
       
-      const sortedProjects = Array.from(projectsMap.values()).sort((a, b) => 
-        (b.projectId || b.id || '').toString().localeCompare((a.projectId || a.id || '').toString())
-      );
+      const sortedProjects = Array.from(projectsMap.values()).sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : new Date(a.startDate || 0).getTime();
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : new Date(b.startDate || 0).getTime();
+        return timeB - timeA;
+      });
       setProjects(sortedProjects);
 
-      // --- 3. MAP BLOCKCHAIN EXPLORER TRANSACTIONS ---
+      // --- 3. MAP BLOCKCHAIN EXPLORER TRANSACTIONS (NEWEST FIRST) ---
       const txs: BlockchainTransaction[] = (blockchainDocs || []).map(doc => ({
         id: doc.id,
         txHash: doc.txHash || '0x...',
@@ -164,11 +172,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         verificationStatus: 'Verified',
         previousBlockHash: doc.metadataCID || doc.ipfsHash,
         blockExplorerUrl: `https://amoy.polygonscan.com/tx/${doc.txHash}`
-      }));
+      })).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
       setBlockchainTxs(txs);
 
     } catch (e) {
-      console.error("Sync Engine Failure:", e);
+      console.error("❌ Sync Engine Failure:", e);
     } finally {
       setLoadingBlockchain(false);
     }
@@ -181,7 +190,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           api.fetchProjects(), api.fetchAuditLogs(), api.fetchBarangays(),
         ]);
         if (projR.status === 'fulfilled') setProjects(projR.value || []);
-        if (logsR.status === 'fulfilled') setAuditLogs(logsR.value || []);
+        if (logsR.status === 'fulfilled') {
+          setAuditLogs(logsR.value || []);
+        } else {
+          console.error("❌ Database Audit Logs Query Rejected because:", logsR.reason);
+        }
         if (barR.status === 'fulfilled') setBarangays(barR.value || INITIAL_BARANGAYS);
         
         await syncEverything();
@@ -245,6 +258,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleUpdateDocument = async (id: string | number, doc: Partial<Document>) => {
+    try {
+      await api.updateDocument(id, doc);
+      toast.success("Document record synced.");
+      await syncEverything();
+    } catch (e) {
+      toast.error("Failed to update local row registry.");
+    }
+  };
+
   const handleDeleteDocument = async (docId: string) => {
     if (!confirm("Remove this document record?")) return false;
     try {
@@ -303,8 +326,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
       await api.updateProject(project.id, verifiedUpdate);
 
+      await api.createAuditLog({
+        timestamp: new Date().toLocaleString(),
+        performedBy: 'Authorized Administrative Key',
+        action: 'Anchored Project Ledger',
+        actionType: 'Verify',
+        module: 'Projects',
+        description: `Immutably sealed "${project.projectTitle}" on Polygon Scan.`,
+        barangay: project.barangay,
+        projectId: project.projectId,
+        projectTitle: project.projectTitle,
+        details: `IPFS CID: ${metadataHash}`,
+        txHash: txHash,
+        block: blockNumber,
+        blockchainStatus: 'Verified'
+      });
+
       toast.dismiss();
-      toast.success("Project Successfully Sealed!");
+      toast.success("Project Successfully Sealed and Logged!");
       await syncEverything(); 
     } catch (error: any) {
       toast.dismiss();
@@ -312,39 +351,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // --- BLOCKCHAIN SEALING (FOR DOCUMENTS) ---
+  // --- BLOCKCHAIN SEALING WITH EXPLICIT DUAL KEY WRITES FOR AUTOMATIC AUTO-REFRESH ---
   const handleSealDocumentToBlockchain = async (doc: Document, files: File[]) => {
     try {
-      toast.loading("Initiating Web3 Protocol...");
+      toast.loading("Step 1 of 4: Mirroring file copies to Supabase Storage...");
+      
+      const databaseImageUrls: string[] = [];
+      if (files && files.length > 0) {
+        const uploadPromises = files.map(file => api.uploadDocumentImage(file));
+        const uploadedUrls = await Promise.all(uploadPromises);
+        databaseImageUrls.push(...uploadedUrls);
+      }
 
-      const { imagesHash, documentHash, txHash, blockNumber } = await completeWeb3Upload(
+      toast.loading("Step 2 of 4: Initiating Web3 Upload Protocol...");
+      const { metadataCID, txHash, blockNumber } = await completeWeb3Upload(
         doc,
         doc.tags || [],
         files,
         LEGICHAIN_CONTRACT_ADDRESS as `0x${string}`,
         (step) => {
-          if (step === 'ipfs') toast.loading("Step 1: Uploading Scanned Document...");
-          if (step === 'metadata') toast.loading("Step 2: Securing Metadata...");
-          if (step === 'minting') toast.loading("Step 3: Anchoring to Polygon...");
+          if (step === 'ipfs') toast.loading("Step 2 of 4: Distributing document over IPFS...");
+          if (step === 'metadata') toast.loading("Step 3 of 4: Securing layout metadata packet...");
+          if (step === 'minting') toast.loading("Step 4 of 4: Anchoring identity block proof on Polygon...");
         }
       );
 
-      const verifiedUpdate: Partial<Document> = { 
+      // Supply both explicit text properties so both client state structures and postgresql cells bind the string
+      const verifiedUpdate = { 
         status: 'Active', 
-        blockchainStatus: 'Verified', 
-        txHash: txHash,         
+        blockchain_status: 'Verified',
+        blockchainStatus: 'Verified',   
+        tx_hash: txHash,               
+        txHash: txHash,                 
         block: blockNumber, 
+        attached_files: databaseImageUrls,
+        attachedFiles: databaseImageUrls, 
         lastModified: new Date().toISOString()
       };
 
       await api.updateDocument(doc.id, verifiedUpdate);
       
+      // Push dynamic entry into Audit Logs timeline view
+      await api.createAuditLog({
+        timestamp: new Date().toLocaleString(),
+        performedBy: 'Authorized Administrative Key',
+        action: 'Immutably Sealed Document',
+        actionType: 'Verify',
+        module: 'Documents',
+        description: `Anchored legal asset "${doc.title}" to Polygon network ledger.`,
+        barangay: doc.barangay,
+        txHash: txHash,
+        block: blockNumber,
+        blockchainStatus: 'Verified'
+      });
+
       toast.dismiss();
-      toast.success("Document Immutably Sealed!");
+      toast.success("Document Immutably Sealed and Backed Up Successfully!");
       await syncEverything(); 
     } catch (error: any) {
       toast.dismiss();
-      toast.error(`Blockchain Error: ${error.message}`);
+      error.message ? toast.error(`Sealing Failure: ${error.message}`) : toast.error("Blockchain execution timed out.");
     }
   };
 
@@ -353,7 +419,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       projects, auditLogs, dbDocuments, blockchainTxs, barangays,
       loadingProjects, loadingBlockchain, projectStats,
       handleCreateProject, handleUpdateProject, handleDeleteProject,
-      handleCreateDocument, handleDeleteDocument,
+      handleCreateDocument, handleUpdateDocument, handleDeleteDocument,
       handleVerifyDocument,
       handleSealProjectToBlockchain, 
       handleSealDocumentToBlockchain, 
