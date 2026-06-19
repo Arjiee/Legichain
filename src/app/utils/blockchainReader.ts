@@ -88,33 +88,30 @@ export function blockchainDocToAppDoc(blockchainDoc: BlockchainDocument, metadat
   // 1. Identify the CID
   const cid = blockchainDoc.ipfsHash || metadata?.documentHash || metadata?.metadataCID;
 
-  // 2. Resolve Image (supports all aliases found in your logs)
+  // 2. Identify the Image
   const img = metadata?.images || metadata?.documentImage || metadata?.image || metadata?.file || metadata?.documentHash;
 
   return {
-    ...metadata,
-    // Use numeric fallbacks for ID to support "Latest on Top" sorting
+    ...metadata, 
     id: metadata?.id || blockchainDoc.tokenId.toString(),
     documentId: metadata?.documentId || `LEG-${blockchainDoc.tokenId}`,
     tokenId: blockchainDoc.tokenId,
     
-    // Property Aliasing
-    images: img,
+    // DATA ALIASING: Set all possible keys so UI components never see 'undefined'
+    images: img, 
     documentImage: img,
-    
-    // 3. TRANSACTION HASH
-    // We leave this as is from metadata; if the reader can't find it, 
-    // it returns undefined/null so the merge doesn't overwrite Supabase.
     txHash: metadata?.txHash || (blockchainDoc as any).txHash,
     
-    // 4. STATUS FORCING
+    // PROOF DATA
+    metadataCID: cid, 
+    barangay: blockchainDoc.barangay || metadata?.barangay,
+    title: blockchainDoc.title || metadata?.title,
+    
+    // STATUS FORCING
     blockchainVerified: true,
     blockchainStatus: 'Verified', 
     verificationStatus: 'Verified on Chain',
     
-    metadataCID: cid, 
-    barangay: blockchainDoc.barangay,
-    title: blockchainDoc.title,
     datePublished: metadata?.datePublished || new Date(Number(blockchainDoc.timestamp) * 1000).toLocaleDateString(),
     type: metadata?.type || 'Ordinance'
   };
