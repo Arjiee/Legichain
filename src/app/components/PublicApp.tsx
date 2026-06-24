@@ -109,20 +109,20 @@ export function PublicApp() {
                 <div className="relative rounded-[40px] overflow-hidden bg-[#7AB2B2] min-h-[500px] flex items-center p-8 md:p-16 border border-[#09637E]/20 shadow-xl">
                   <div className="absolute inset-0 opacity-20 grayscale">
                     <ImageWithFallback
-                      src="https://images.unsplash.com/photo-1593642532400-2682810df593?q=80&w=1000&auto=format&fit=crop"
+                      src="resources\IMG_20260624_125906.jpg"
                       className="w-full h-full object-cover"
                       alt="Barangay"
                     />
                   </div>
                   <div className="relative z-10 max-w-2xl">
                     <h1 className="text-5xl md:text-6xl font-black text-white leading-tight mb-6">
-                      Civic Accountability,{' '}
+                      Poblacion 5 Transparency Portal,{' '}
                       <br />
                       <span className="text-[#09637E]">Powered by the Chain.</span>
                     </h1>
                     <p className="text-lg text-white/90 mb-10 leading-relaxed font-medium">
                       Monitor local governance with absolute certainty. Access real-time project tracking and the official 
-                      document registry of GMA, Cavite—secured immutably on the Polygon blockchain.
+                      document registry of Poblacion 5, GMA, Cavite—secured immutably on the Polygon blockchain.
                     </p>
                     <div className="flex flex-wrap gap-4">
                       <button
@@ -219,7 +219,7 @@ export function PublicApp() {
             </div>
             <span className="font-black text-[#09637E] tracking-tight">LegiChain</span>
           </div>
-          <p className="text-xs text-gray-400 font-medium">© 2026 LegiChain · GMA, Cavite · Securing Governance via Blockchain</p>
+          <p className="text-xs text-gray-400 font-medium">© 2026 LegiChain · Poblacion 5, GMA, Cavite · Securing Governance via Blockchain</p>
         </div>
       </footer>
     </div>

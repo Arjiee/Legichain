@@ -63,13 +63,13 @@ export function LoginPage() {
               <span className="text-[#7AB2B2]">Secured by Blockchain.</span>
             </h1>
             <p className="text-white/70 font-medium leading-relaxed">
-              Manage and monitor barangay projects across General Mariano Alvarez, Cavite with immutable blockchain verification and full financial transparency.
+              Manage and monitor barangay projects across Poblacion 5, General Mariano Alvarez, Cavite with immutable blockchain verification and full financial transparency.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'Barangays', value: '5' },
+              { label: 'Barangay', value: 'Poblacion 5' },
               { label: 'Project Categories', value: '4' },
               { label: 'Blockchain Verified', value: '100%' },
               { label: 'Public Access', value: '24/7' },
@@ -84,7 +84,7 @@ export function LoginPage() {
 
         <div className="relative z-10">
           <p className="text-white/40 text-xs font-medium">
-            © 2026 LegiChain · GMA, Cavite · All rights reserved
+            © 2026 LegiChain · Poblacion 5, GMA, Cavite · All rights reserved
           </p>
         </div>
       </div>
@@ -112,14 +112,14 @@ export function LoginPage() {
             </p>
           </div>
 
-          {/* Demo credentials hint */}
+          {/* Demo credentials hint
           <div className="mb-6 p-4 rounded-2xl bg-[#EBF4F6] border border-[#09637E]/20">
             <p className="text-xs font-bold text-[#09637E] uppercase tracking-wider mb-2">Demo Credentials</p>
             <div className="space-y-1">
               <p className="text-xs text-gray-600 font-medium">Username: <span className="font-mono font-bold text-[#09637E]">admin</span> · Password: <span className="font-mono font-bold text-[#09637E]">admin123</span></p>
               <p className="text-xs text-gray-600 font-medium">Username: <span className="font-mono font-bold text-[#09637E]">captain</span> · Password: <span className="font-mono font-bold text-[#09637E]">captain123</span></p>
             </div>
-          </div>
+          </div> */}
 
           <form onSubmit={handleLogin} className="space-y-5">
             {/* Username */}

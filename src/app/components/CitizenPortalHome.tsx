@@ -237,7 +237,7 @@ export function CitizenPortalHome({ onViewResolution, onLogout, onNavigate }: Ci
               Barangay Document Portal
             </p>
             <p className="text-sm mt-4 text-[#504B38]/40 font-medium">
-              © 2026 GMA Blockchain. Digital Governance System
+              © 2026 Poblacion 5, GMA Blockchain. Digital Governance System
             </p>
           </div>
         </footer>

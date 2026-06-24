@@ -146,17 +146,14 @@ export async function createDocument(doc: Document): Promise<Document> {
     blockchain_status: doc.blockchainStatus || 'Local',
     block: doc.block || ''
   };
-  
   const { data, error } = await supabase
     .from('documents')
     .insert([databaseRow])
     .select();
-    
   if (error) {
     console.error("Supabase Document Insertion Error Details:", error.message);
     throw error;
   }
-  
   return {
     ...data[0],
     txHash: data[0].tx_hash || '0x...',
