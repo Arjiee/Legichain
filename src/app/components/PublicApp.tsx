@@ -109,7 +109,7 @@ export function PublicApp() {
                 <div className="relative rounded-[40px] overflow-hidden bg-[#7AB2B2] min-h-[500px] flex items-center p-8 md:p-16 border border-[#09637E]/20 shadow-xl">
                   <div className="absolute inset-0 opacity-20 grayscale">
                     <ImageWithFallback
-                      src="resources\IMG_20260624_125906.jpg"
+                      src="./resources/IMG_20260624_125906.jpg"
                       className="w-full h-full object-cover"
                       alt="Barangay"
                     />
