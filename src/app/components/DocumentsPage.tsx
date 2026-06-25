@@ -51,7 +51,7 @@ export function DocumentsPage({ documents, barangays, onViewDetails, loading }: 
         <div>
           <h1 className="text-3xl font-black text-[#1C1C1C] tracking-tight">Documents Monitoring</h1>
           <p className="text-[#088395] font-black uppercase text-[10px] tracking-[0.2em] mt-1">
-            GMA, Cavite Public Legislative Registry
+            Poblacion 5, GMA, Cavite Public Legislative Registry
           </p>
         </div>
         <div className="bg-white px-4 py-2 rounded-2xl border border-[#09637E]/10 flex items-center gap-2">
